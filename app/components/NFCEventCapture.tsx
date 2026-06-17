@@ -19,21 +19,31 @@ interface Contact {
   title: string;
 }
 
+interface Tag {
+  id: string;
+  name: string;
+  is_system: boolean;
+}
+
 interface NFCEventCaptureProps {
-  onCapture: (contact: Contact) => void;
+  onCapture: (contact: Contact, tags: Tag[]) => void;
   onClose: () => void;
   eventName: string;
+  availableTags: Tag[];
 }
 
 export default function NFCEventCapture({
   onCapture,
   onClose,
   eventName,
+  availableTags,
 }: NFCEventCaptureProps) {
   const [isScanning, setIsScanning] = useState(false);
   const [capturedCount, setCapturedCount] = useState(0);
   const [lastContact, setLastContact] = useState<Contact | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
+  const [showTagSelector, setShowTagSelector] = useState(true);
   const pulseAnim = new Animated.Value(1);
   const { colors } = useTheme();
 
@@ -61,6 +71,11 @@ export default function NFCEventCapture({
   };
 
   const handleNFCTap = () => {
+    if (selectedTags.length === 0) {
+      setShowTagSelector(true);
+      return;
+    }
+    
     // Simulate NFC read
     const contact: Contact = {
       firstName: 'John',
@@ -75,10 +90,92 @@ export default function NFCEventCapture({
     setLastContact(contact);
     setCapturedCount(prev => prev + 1);
     setShowSuccess(true);
-    onCapture(contact);
+    onCapture(contact, selectedTags);
     
     setTimeout(() => setShowSuccess(false), 2000);
   };
+
+  const toggleTag = (tag: Tag) => {
+    const exists = selectedTags.find(t => t.id === tag.id);
+    if (exists) {
+      setSelectedTags(selectedTags.filter(t => t.id !== tag.id));
+    } else {
+      setSelectedTags([...selectedTags, tag]);
+    }
+  };
+
+  // Tag Selector Screen
+  if (showTagSelector) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={onClose}>
+            <Ionicons name="close" size={32} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={[styles.title, { color: colors.text }]}>Select Tags</Text>
+          <TouchableOpacity onPress={() => setShowTagSelector(false)}>
+            <Text style={[styles.doneText, { color: colors.primary }]}>
+              Done ({selectedTags.length})
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={[styles.tagInstructions, { color: colors.textMuted }]}>
+          Select tags to apply to all NFC captures at this event
+        </Text>
+
+        <View style={styles.tagList}>
+          {availableTags.map(tag => (
+            <TouchableOpacity
+              key={tag.id}
+              style={[
+                styles.tagItem,
+                {
+                  backgroundColor: selectedTags.find(t => t.id === tag.id)
+                    ? colors.primary
+                    : colors.surface,
+                  borderColor: colors.border,
+                },
+              ]}
+              onPress={() => toggleTag(tag)}
+            >
+              <Text
+                style={{
+                  color: selectedTags.find(t => t.id === tag.id)
+                    ? '#fff'
+                    : colors.text,
+                  fontWeight: '500',
+                }}
+              >
+                {tag.name}
+              </Text>
+              {tag.is_system && (
+                <Ionicons
+                  name="flash"
+                  size={12}
+                  color={selectedTags.find(t => t.id === tag.id) ? '#fff' : colors.primary}
+                />
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <TouchableOpacity
+          style={[styles.continueButton, { backgroundColor: colors.primary }]}
+          onPress={() => {
+            if (selectedTags.length > 0) {
+              setShowTagSelector(false);
+            }
+          }}
+          disabled={selectedTags.length === 0}
+        >
+          <Text style={styles.continueButtonText}>
+            Continue with {selectedTags.length} tag(s)
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -94,7 +191,27 @@ export default function NFCEventCapture({
             NFC Event Mode
           </Text>
         </View>
-        <View style={{ width: 32 }} />
+        <TouchableOpacity onPress={() => setShowTagSelector(true)}>
+          <Text style={[styles.editTagsText, { color: colors.primary }]}>
+            Edit Tags
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.selectedTagsPreview}>
+        <Text style={[styles.previewLabel, { color: colors.textMuted }]}>
+          Tags ({selectedTags.length}):
+        </Text>
+        <View style={styles.previewTags}>
+          {selectedTags.map(tag => (
+            <View
+              key={tag.id}
+              style={[styles.previewTag, { backgroundColor: colors.primary }]}
+            >
+              <Text style={styles.previewTagText}>{tag.name}</Text>
+            </View>
+          ))}
+        </View>
       </View>
 
       <View style={styles.counterContainer}>
@@ -184,6 +301,75 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingBottom: 20,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  doneText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  tagInstructions: {
+    fontSize: 14,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  tagList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 20,
+    gap: 10,
+  },
+  tagItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 6,
+  },
+  continueButton: {
+    margin: 20,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  continueButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  selectedTagsPreview: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  previewLabel: {
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  previewTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  previewTag: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  previewTagText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  editTagsText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   headerCenter: {
     alignItems: 'center',

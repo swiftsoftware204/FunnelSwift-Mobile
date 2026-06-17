@@ -18,6 +18,7 @@ import { useTheme } from '../../lib/ThemeContext';
 import { supabase, LeadInsert } from '../../lib/supabase';
 import BusinessCardScanner, { ScannedCardData } from '../components/BusinessCardScanner';
 import TagSelector from '../components/TagSelector';
+import NFCEventCapture from '../components/NFCEventCapture';
 
 const INDUSTRIES = [
   'Restaurant', 'Retail', 'Healthcare', 'Real Estate', 
@@ -44,6 +45,8 @@ export default function CaptureScreen() {
   const [showScanner, setShowScanner] = useState(false);
   const [showTagSelector, setShowTagSelector] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [showNFC, setShowNFC] = useState(false);
+  const [availableTags, setAvailableTags] = useState<any[]>([]);
   
   const { user } = useAuth();
   const { colors, spacing } = useTheme();
@@ -194,6 +197,13 @@ export default function CaptureScreen() {
             >
               <Ionicons name="camera" size={20} color="#fff" />
               <Text style={styles.scanButtonText}>Scan Card</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.scanButton, { backgroundColor: colors.warning || '#F59E0B', marginLeft: 8 }]}
+              onPress={() => setShowNFC(true)}
+            >
+              <Ionicons name="wifi" size={20} color="#fff" />
+              <Text style={styles.scanButtonText}>NFC Event</Text>
             </TouchableOpacity>
             {location && (
               <View style={styles.locationBadge}>
@@ -413,6 +423,18 @@ export default function CaptureScreen() {
         onToggleTag={handleToggleTag}
         onClose={() => setShowTagSelector(false)}
       />
+      
+      {showNFC && (
+        <NFCEventCapture
+          eventName="Networking Event"
+          availableTags={availableTags}
+          onCapture={(contact, tags) => {
+            // Handle NFC capture
+            console.log('NFC Contact:', contact, 'Tags:', tags);
+          }}
+          onClose={() => setShowNFC(false)}
+        />
+      )}
     </KeyboardAvoidingView>
   );
 }
