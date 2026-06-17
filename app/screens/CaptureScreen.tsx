@@ -58,18 +58,82 @@ export default function CaptureScreen() {
         let loc = await Location.getCurrentPositionAsync({});
         setLocation(loc);
       }
+      
+      // Load available tags
+      const { data: tags } = await supabase
+        .from('system_tags')
+        .select('id, name, is_system')
+        .eq('is_active', true);
+      if (tags) {
+        setAvailableTags(tags);
+      }
     })();
   }, []);
 
-  function handleScanComplete(data: ScannedCardData) {
+  async function handleScanComplete(data: ScannedCardData, tags: any[]) {
     setShowScanner(false);
+    
+    // Check if contact already exists by email or phone
+    if (data.email || data.phone) {
+      const { data: existingContact } = await supabase
+        .from('contacts')
+        .select('id')
+        .or(`email.eq.${data.email},phone.eq.${data.phone}`)
+        .single();
+
+      if (existingContact) {
+        // Contact exists - just add new tags and fire automations
+        await addTagsToContact(existingContact.id, tags);
+        Alert.alert(
+          'Contact Updated',
+          `Existing contact found. ${tags.length} new tag(s) applied and automations fired.`,
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+    }
+    
+    // New contact - fill form with scanned data
     if (data.business_name) setBusinessName(data.business_name);
     if (data.first_name) setFirstName(data.first_name);
     if (data.last_name) setLastName(data.last_name);
     if (data.email) setEmail(data.email);
     if (data.phone) setPhone(data.phone);
     if (data.website) setWebsite(data.website);
-    Alert.alert('Card Scanned', 'Business card information has been extracted. Please review and edit if needed.');
+    
+    // Store tags to apply after save
+    if (tags.length > 0) {
+      setSelectedTags(tags.map(t => t.name));
+    }
+    
+    Alert.alert('Card Scanned', 'Business card information extracted. Review and save to fire automations.');
+  }
+
+  async function addTagsToContact(contactId: string, tags: any[]) {
+    for (const tag of tags) {
+      if (tag.is_system) {
+        await supabase.from('contact_tags').insert({
+          contact_id: contactId,
+          system_tag_id: tag.id,
+        });
+      } else {
+        await supabase.from('contact_tags').insert({
+          contact_id: contactId,
+          tag_id: tag.id,
+        });
+      }
+    }
+
+    // Fire webhook for each tag
+    for (const tag of tags) {
+      await supabase.functions.invoke('tag-trigger-webhook', {
+        body: {
+          contact_id: contactId,
+          tag_id: tag.id,
+          tag_name: tag.name,
+        },
+      });
+    }
   }
 
   function handleToggleTag(tagName: string) {
@@ -176,6 +240,7 @@ export default function CaptureScreen() {
       <BusinessCardScanner
         onScanComplete={handleScanComplete}
         onClose={() => setShowScanner(false)}
+        availableTags={availableTags}
       />
     );
   }

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,8 +7,9 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  ScrollView,
 } from 'react-native';
-import { Camera, CameraType } from 'expo-camera';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../lib/ThemeContext';
@@ -25,37 +26,46 @@ export interface ScannedCardData {
   title?: string;
 }
 
-interface Props {
-  onScanComplete: (data: ScannedCardData) => void;
-  onClose: () => void;
+interface Tag {
+  id: string;
+  name: string;
+  is_system: boolean;
 }
 
-export default function BusinessCardScanner({ onScanComplete, onClose }: Props) {
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+interface Props {
+  onScanComplete: (data: ScannedCardData, tags: Tag[]) => void;
+  onClose: () => void;
+  availableTags: Tag[];
+}
+
+export default function BusinessCardScanner({ onScanComplete, onClose, availableTags }: Props) {
+  const [permission, requestPermission] = useCameraPermissions();
   const [scanning, setScanning] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
-  const cameraRef = useRef<Camera>(null);
+  const [scannedData, setScannedData] = useState<ScannedCardData | null>(null);
+  const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
+  const [showTagSelector, setShowTagSelector] = useState(false);
+  const cameraRef = useRef<CameraView>(null);
   const { colors } = useTheme();
 
-  React.useEffect(() => {
-    (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === 'granted');
-    })();
-  }, []);
+  useEffect(() => {
+    if (!permission?.granted) {
+      requestPermission();
+    }
+  }, [permission]);
 
   async function takePicture() {
     if (!cameraRef.current) return;
     setScanning(true);
     try {
       const photo = await cameraRef.current.takePictureAsync({
-        base64: false,
+        base64: true,
         quality: 0.8,
       });
-      if (photo?.uri) {
+      if (photo?.base64) {
         setImageUri(photo.uri);
-        await processImage(photo.uri);
+        await processImage(photo.base64);
       }
     } catch (err) {
       Alert.alert('Error', 'Failed to capture image');
@@ -67,81 +77,73 @@ export default function BusinessCardScanner({ onScanComplete, onClose }: Props) 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.8,
+      base64: true,
     });
-    if (!result.canceled && result.assets[0]) {
+    if (!result.canceled && result.assets[0]?.base64) {
       setImageUri(result.assets[0].uri);
-      await processImage(result.assets[0].uri);
+      await processImage(result.assets[0].base64);
     }
   }
 
-  async function processImage(uri: string) {
+  async function processImage(base64: string) {
     setProcessing(true);
     try {
-      const formData = new FormData();
-      const filename = uri.split('/').pop() || 'business_card.jpg';
-      const fileType = filename.endsWith('.png') ? 'image/png' : 'image/jpeg';
-      
-      formData.append('image', {
-        uri,
-        name: filename,
-        type: fileType,
-      } as any);
-
-      const { data, error } = await supabase.functions.invoke('ocr-parse-card', {
-        body: formData,
+      // Use backend OCR API
+      const response = await fetch('https://funnelswift.com/api/ocr/parse-card', {
+        method: 'POST',
         headers: {
-          'Content-Type': 'multipart/form-data',
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ imageBase64: base64 }),
       });
 
-      if (error) {
-        // Fallback: call web OCR endpoint directly
-        const response = await fetch(
-          'https://wtlbpeoabwneitawrrtz.supabase.co/functions/v1/ocr-parse-card',
-          {
-            method: 'POST',
-            body: formData,
-            headers: {
-              Authorization: `Bearer ${supabase.supabaseKey}`,
-            },
-          }
-        );
-        const result = await response.json();
-        if (result.error) {
-          Alert.alert('OCR Error', result.error);
-        } else {
-          onScanComplete(result as ScannedCardData);
-        }
-      } else {
-        onScanComplete(data as ScannedCardData);
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'OCR failed');
       }
+
+      const data: ScannedCardData = {
+        business_name: result.extracted.businessName || '',
+        first_name: result.extracted.firstName || '',
+        last_name: result.extracted.lastName || '',
+        email: result.extracted.email || '',
+        phone: result.extracted.phone || '',
+        website: result.extracted.website || '',
+        title: result.extracted.title || '',
+      };
+
+      setScannedData(data);
+      setShowTagSelector(true);
     } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to process business card');
+      Alert.alert('OCR Error', err?.message || 'Failed to process business card');
+      setImageUri(null);
     }
     setProcessing(false);
   }
 
-  if (hasPermission === null) {
+  const toggleTag = (tag: Tag) => {
+    const exists = selectedTags.find(t => t.id === tag.id);
+    if (exists) {
+      setSelectedTags(selectedTags.filter(t => t.id !== tag.id));
+    } else {
+      setSelectedTags([...selectedTags, tag]);
+    }
+  };
+
+  const handleSave = () => {
+    if (scannedData) {
+      onScanComplete(scannedData, selectedTags);
+    }
+  };
+
+  if (!permission?.granted) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
-
-  if (hasPermission === false) {
-    return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <Ionicons name="camera-off" size={64} color={colors.textMuted} />
         <Text style={[styles.permissionText, { color: colors.text }]}>
-          Camera permission is required to scan business cards
+          Requesting camera permission...
         </Text>
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: colors.primary }]}
-          onPress={onClose}
-        >
-          <Text style={styles.buttonText}>Go Back</Text>
-        </TouchableOpacity>
       </View>
     );
   }
@@ -160,6 +162,86 @@ export default function BusinessCardScanner({ onScanComplete, onClose }: Props) 
     );
   }
 
+  // Tag Selector Screen
+  if (showTagSelector && scannedData) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={onClose}>
+            <Ionicons name="close" size={28} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>
+            Select Tags
+          </Text>
+          <TouchableOpacity 
+            onPress={handleSave}
+            disabled={selectedTags.length === 0}
+          >
+            <Text style={[
+              styles.saveText, 
+              { color: selectedTags.length > 0 ? colors.primary : colors.textMuted }
+            ]}>
+              Save ({selectedTags.length})
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.scannedInfo}>
+          <Text style={[styles.scannedName, { color: colors.text }]}>
+            {scannedData.first_name} {scannedData.last_name}
+          </Text>
+          <Text style={[styles.scannedCompany, { color: colors.textMuted }]}>
+            {scannedData.business_name}
+          </Text>
+        </View>
+
+        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
+          Select tags to apply:
+        </Text>
+
+        <ScrollView style={styles.tagList}>
+          {availableTags.map(tag => (
+            <TouchableOpacity
+              key={tag.id}
+              style={[
+                styles.tagItem,
+                {
+                  backgroundColor: selectedTags.find(t => t.id === tag.id)
+                    ? colors.primary
+                    : colors.surface,
+                  borderColor: colors.border,
+                },
+              ]}
+              onPress={() => toggleTag(tag)}
+            >
+              <Text
+                style={{
+                  color: selectedTags.find(t => t.id === tag.id)
+                    ? '#fff'
+                    : colors.text,
+                  fontWeight: '500',
+                }}
+              >
+                {tag.name}
+              </Text>
+              {tag.is_system && (
+                <Ionicons
+                  name="flash"
+                  size={12}
+                  color={selectedTags.find(t => t.id === tag.id) ? '#fff' : colors.primary}
+                />
+              )}
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        <Text style={[styles.hint, { color: colors.textMuted }]}>
+          Tags will fire automations when contact is saved
+        </Text>
+      </View>
+    );
+  }
+
   if (imageUri) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -167,7 +249,10 @@ export default function BusinessCardScanner({ onScanComplete, onClose }: Props) 
         <View style={styles.buttonRow}>
           <TouchableOpacity
             style={[styles.button, { backgroundColor: colors.surface }]}
-            onPress={() => setImageUri(null)}
+            onPress={() => {
+              setImageUri(null);
+              setScannedData(null);
+            }}
           >
             <Ionicons name="refresh" size={24} color={colors.text} />
             <Text style={[styles.buttonText, { color: colors.text }]}>Retake</Text>
@@ -186,14 +271,12 @@ export default function BusinessCardScanner({ onScanComplete, onClose }: Props) 
 
   return (
     <View style={styles.cameraContainer}>
-      <Camera
+      <CameraView
         ref={cameraRef}
         style={styles.camera}
-        type={CameraType.back}
-        ratio="4:3"
+        facing="back"
       >
         <View style={styles.cameraOverlay}>
-          {/* Scanner frame guide */}
           <View style={styles.scannerFrame}>
             <View style={styles.cornerTL} />
             <View style={styles.cornerTR} />
@@ -204,7 +287,7 @@ export default function BusinessCardScanner({ onScanComplete, onClose }: Props) 
             Align business card within the frame
           </Text>
         </View>
-      </Camera>
+      </CameraView>
 
       <View style={[styles.controls, { backgroundColor: colors.background }]}>
         <TouchableOpacity
@@ -242,8 +325,60 @@ const FRAME_SIZE = 280;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
+    paddingTop: 60,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  saveText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  scannedInfo: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  scannedName: {
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  scannedCompany: {
+    fontSize: 14,
+    marginTop: 4,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 10,
+  },
+  tagList: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  tagItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  hint: {
+    fontSize: 12,
+    textAlign: 'center',
     padding: 20,
   },
   cameraContainer: {
@@ -260,7 +395,7 @@ const styles = StyleSheet.create({
   },
   scannerFrame: {
     width: FRAME_SIZE,
-    height: FRAME_SIZE * 0.63, // Business card aspect ratio ~1.586:1
+    height: FRAME_SIZE * 0.63,
     position: 'relative',
   },
   cornerTL: {
@@ -347,6 +482,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 16,
     marginTop: 20,
+    paddingHorizontal: 20,
   },
   button: {
     flexDirection: 'row',
@@ -355,6 +491,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 8,
     gap: 8,
+    flex: 1,
+    justifyContent: 'center',
   },
   buttonText: {
     color: '#fff',
