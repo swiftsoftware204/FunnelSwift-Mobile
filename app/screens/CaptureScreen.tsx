@@ -16,6 +16,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../lib/AuthContext';
 import { useTheme } from '../../lib/ThemeContext';
 import { supabase, LeadInsert } from '../../lib/supabase';
+import BusinessCardScanner, { ScannedCardData } from '../components/BusinessCardScanner';
+import TagSelector from '../components/TagSelector';
 
 const INDUSTRIES = [
   'Restaurant', 'Retail', 'Healthcare', 'Real Estate', 
@@ -39,6 +41,9 @@ export default function CaptureScreen() {
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const [showTagSelector, setShowTagSelector] = useState(false);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   
   const { user } = useAuth();
   const { colors, spacing } = useTheme();
@@ -53,6 +58,25 @@ export default function CaptureScreen() {
     })();
   }, []);
 
+  function handleScanComplete(data: ScannedCardData) {
+    setShowScanner(false);
+    if (data.business_name) setBusinessName(data.business_name);
+    if (data.first_name) setFirstName(data.first_name);
+    if (data.last_name) setLastName(data.last_name);
+    if (data.email) setEmail(data.email);
+    if (data.phone) setPhone(data.phone);
+    if (data.website) setWebsite(data.website);
+    Alert.alert('Card Scanned', 'Business card information has been extracted. Please review and edit if needed.');
+  }
+
+  function handleToggleTag(tagName: string) {
+    setSelectedTags(prev =>
+      prev.includes(tagName)
+        ? prev.filter(t => t !== tagName)
+        : [...prev, tagName]
+    );
+  }
+
   async function handleSubmit() {
     if (!businessName && !firstName && !phone) {
       Alert.alert('Error', 'Please enter at least a business name, contact name, or phone number');
@@ -61,14 +85,12 @@ export default function CaptureScreen() {
 
     setSubmitting(true);
 
-    // Get user's tenant_id from their profile
     const { data: profile } = await supabase
       .from('user_profiles')
       .select('tenant_id')
       .eq('id', user?.id)
       .single();
 
-    // If no tenant assigned, use a default or prompt user
     const tenantId = profile?.tenant_id || await getDefaultTenant();
 
     const lead: LeadInsert = {
@@ -97,6 +119,15 @@ export default function CaptureScreen() {
     if (error) {
       Alert.alert('Error', error.message);
     } else {
+      // Save tags if any were selected
+      if (selectedTags.length > 0 && data) {
+        const tagInserts = selectedTags.map(tagName => ({
+          contact_id: data.id,
+          tag_name: tagName,
+        }));
+        await supabase.from('contact_tags').insert(tagInserts).maybeSingle();
+      }
+
       Alert.alert(
         'Success!',
         'Lead captured successfully.',
@@ -106,18 +137,16 @@ export default function CaptureScreen() {
   }
 
   async function getDefaultTenant(): Promise<string> {
-    // Get first available tenant or create logic
     const { data } = await supabase
       .from('tenants')
       .select('id')
       .limit(1)
       .single();
-    
     return data?.id || '';
   }
 
   function calculateLeadScore(): number {
-    let score = 50; // Base score
+    let score = 50;
     if (email) score += 10;
     if (phone) score += 10;
     if (website) score += 10;
@@ -136,6 +165,16 @@ export default function CaptureScreen() {
     setIndustry('');
     setSource('Walk-in');
     setNotes('');
+    setSelectedTags([]);
+  }
+
+  if (showScanner) {
+    return (
+      <BusinessCardScanner
+        onScanComplete={handleScanComplete}
+        onClose={() => setShowScanner(false)}
+      />
+    );
   }
 
   return (
@@ -148,14 +187,23 @@ export default function CaptureScreen() {
           <Text style={[styles.title, { color: colors.text }]}>
             Capture Lead
           </Text>
-          {location && (
-            <View style={styles.locationBadge}>
-              <Ionicons name="location" size={14} color={colors.success} />
-              <Text style={[styles.locationText, { color: colors.success }]}>
-                Location captured
-              </Text>
-            </View>
-          )}
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={[styles.scanButton, { backgroundColor: colors.primary }]}
+              onPress={() => setShowScanner(true)}
+            >
+              <Ionicons name="camera" size={20} color="#fff" />
+              <Text style={styles.scanButtonText}>Scan Card</Text>
+            </TouchableOpacity>
+            {location && (
+              <View style={styles.locationBadge}>
+                <Ionicons name="location" size={14} color={colors.success} />
+                <Text style={[styles.locationText, { color: colors.success }]}>
+                  GPS
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
 
         <View style={[styles.card, { backgroundColor: colors.surface }]}>
@@ -305,6 +353,28 @@ export default function CaptureScreen() {
             </ScrollView>
           </View>
 
+          {/* Tags Section */}
+          <TouchableOpacity
+            style={[styles.tagSelector, { borderColor: colors.border }]}
+            onPress={() => setShowTagSelector(true)}
+          >
+            <Ionicons name="pricetags" size={20} color={colors.primary} />
+            {selectedTags.length > 0 ? (
+              <View style={styles.selectedTagsRow}>
+                {selectedTags.map(tag => (
+                  <View key={tag} style={[styles.miniTag, { backgroundColor: colors.primary + '30' }]}>
+                    <Text style={[styles.miniTagText, { color: colors.primary }]}>{tag}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={[styles.tagPlaceholder, { color: colors.textMuted }]}>
+                Add tags...
+              </Text>
+            )}
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          </TouchableOpacity>
+
           <TextInput
             style={[styles.textArea, { 
               backgroundColor: colors.surfaceLight,
@@ -336,6 +406,13 @@ export default function CaptureScreen() {
           )}
         </TouchableOpacity>
       </ScrollView>
+
+      <TagSelector
+        visible={showTagSelector}
+        selectedTags={selectedTags}
+        onToggleTag={handleToggleTag}
+        onClose={() => setShowTagSelector(false)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -348,14 +425,30 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     marginBottom: 16,
   },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  scanButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 8,
+  },
+  scanButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   locationBadge: {
     flexDirection: 'row',
@@ -418,6 +511,35 @@ const styles = StyleSheet.create({
   chipText: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  tagSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    marginBottom: 12,
+    gap: 8,
+  },
+  selectedTagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    flex: 1,
+    gap: 4,
+  },
+  miniTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  miniTagText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  tagPlaceholder: {
+    flex: 1,
+    fontSize: 16,
   },
   submitButton: {
     flexDirection: 'row',

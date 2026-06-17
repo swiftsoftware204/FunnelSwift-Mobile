@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,20 +7,40 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../lib/ThemeContext';
 import { supabase, Lead } from '../../lib/supabase';
 
+type FilterStatus = 'all' | 'new' | 'contacted' | 'qualified' | 'converted' | 'lost';
+
+const FILTERS: { key: FilterStatus; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'new', label: 'New' },
+  { key: 'contacted', label: 'Contacted' },
+  { key: 'qualified', label: 'Qualified' },
+  { key: 'converted', label: 'Converted' },
+  { key: 'lost', label: 'Lost' },
+];
+
 export default function LeadsScreen({ navigation }: any) {
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [filteredLeads, setFilteredLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<FilterStatus>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [leadTags, setLeadTags] = useState<Record<string, string[]>>({});
   const { colors } = useTheme();
 
   useEffect(() => {
     fetchLeads();
   }, []);
+
+  useEffect(() => {
+    applyFilters();
+  }, [leads, activeFilter, searchQuery]);
 
   async function fetchLeads() {
     const { data, error } = await supabase
@@ -30,8 +50,48 @@ export default function LeadsScreen({ navigation }: any) {
 
     if (!error && data) {
       setLeads(data);
+      // Fetch tags for all leads
+      const leadIds = data.map(l => l.id);
+      if (leadIds.length > 0) {
+        const { data: tags } = await supabase
+          .from('contact_tags')
+          .select('contact_id, tag_name')
+          .in('contact_id', leadIds);
+        
+        if (tags) {
+          const tagMap: Record<string, string[]> = {};
+          tags.forEach(t => {
+            if (!tagMap[t.contact_id]) tagMap[t.contact_id] = [];
+            tagMap[t.contact_id].push(t.tag_name);
+          });
+          setLeadTags(tagMap);
+        }
+      }
     }
     setLoading(false);
+  }
+
+  function applyFilters() {
+    let filtered = [...leads];
+
+    // Status filter
+    if (activeFilter !== 'all') {
+      filtered = filtered.filter(l => l.status === activeFilter);
+    }
+
+    // Search filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(l =>
+        (l.business_name?.toLowerCase().includes(q)) ||
+        (l.first_name?.toLowerCase().includes(q)) ||
+        (l.last_name?.toLowerCase().includes(q)) ||
+        (l.email?.toLowerCase().includes(q)) ||
+        (l.phone?.toLowerCase().includes(q))
+      );
+    }
+
+    setFilteredLeads(filtered);
   }
 
   async function onRefresh() {
@@ -52,6 +112,7 @@ export default function LeadsScreen({ navigation }: any) {
   }
 
   function renderLead({ item }: { item: Lead }) {
+    const tags = leadTags[item.id] || [];
     return (
       <TouchableOpacity
         style={[styles.leadCard, { backgroundColor: colors.surface }]}
@@ -94,6 +155,22 @@ export default function LeadsScreen({ navigation }: any) {
           )}
         </View>
 
+        {/* Tags */}
+        {tags.length > 0 && (
+          <View style={styles.tagsRow}>
+            {tags.slice(0, 3).map(tag => (
+              <View key={tag} style={[styles.miniTag, { backgroundColor: colors.primary + '20' }]}>
+                <Text style={[styles.miniTagText, { color: colors.primary }]}>{tag}</Text>
+              </View>
+            ))}
+            {tags.length > 3 && (
+              <Text style={[styles.moreTags, { color: colors.textMuted }]}>
+                +{tags.length - 3}
+              </Text>
+            )}
+          </View>
+        )}
+
         <View style={styles.leadFooter}>
           <Text style={[styles.scoreText, { color: colors.primary }]}>
             Score: {item.lead_score}/100
@@ -116,8 +193,57 @@ export default function LeadsScreen({ navigation }: any) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Search Bar */}
+      <View style={[styles.searchContainer, { backgroundColor: colors.surface }]}>
+        <Ionicons name="search" size={20} color={colors.textMuted} />
+        <TextInput
+          style={[styles.searchInput, { color: colors.text }]}
+          placeholder="Search leads..."
+          placeholderTextColor={colors.textMuted}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <Ionicons name="close-circle" size={20} color={colors.textMuted} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Filter Chips */}
+      <View style={styles.filterRow}>
+        <FlatList
+          horizontal
+          data={FILTERS}
+          keyExtractor={f => f.key}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterList}
+          renderItem={({ item: filter }) => (
+            <TouchableOpacity
+              style={[
+                styles.filterChip,
+                {
+                  backgroundColor: activeFilter === filter.key ? colors.primary : colors.surface,
+                  borderColor: activeFilter === filter.key ? colors.primary : colors.border,
+                },
+              ]}
+              onPress={() => setActiveFilter(filter.key)}
+            >
+              <Text
+                style={[
+                  styles.filterChipText,
+                  { color: activeFilter === filter.key ? '#fff' : colors.text },
+                ]}
+              >
+                {filter.label}
+              </Text>
+            </TouchableOpacity>
+          )}
+        />
+      </View>
+
       <FlatList
-        data={leads}
+        data={filteredLeads}
         renderItem={renderLead}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
@@ -127,9 +253,13 @@ export default function LeadsScreen({ navigation }: any) {
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons name="people-outline" size={64} color={colors.textMuted} />
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>No Leads Yet</Text>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>
+              {searchQuery ? 'No leads match your search' : 'No Leads Yet'}
+            </Text>
             <Text style={[styles.emptySubtitle, { color: colors.textMuted }]}>
-              Start capturing leads by tapping the Capture tab
+              {searchQuery
+                ? 'Try a different search term'
+                : 'Start capturing leads by tapping the Capture tab'}
             </Text>
           </View>
         }
@@ -141,6 +271,38 @@ export default function LeadsScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    height: 44,
+    borderRadius: 10,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    height: 44,
+  },
+  filterRow: {
+    marginVertical: 8,
+  },
+  filterList: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  filterChipText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   list: {
     padding: 16,
@@ -178,7 +340,7 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
   },
   leadDetails: {
-    marginBottom: 12,
+    marginBottom: 8,
   },
   detailRow: {
     flexDirection: 'row',
@@ -188,6 +350,25 @@ const styles = StyleSheet.create({
   detailText: {
     marginLeft: 8,
     fontSize: 14,
+  },
+  tagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginBottom: 12,
+  },
+  miniTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  miniTagText: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  moreTags: {
+    fontSize: 11,
+    alignSelf: 'center',
   },
   leadFooter: {
     flexDirection: 'row',
