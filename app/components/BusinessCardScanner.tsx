@@ -29,6 +29,10 @@ export interface ScannedCardData {
 interface Tag {
   id: string;
   name: string;
+  displayName?: string;
+  color?: string;
+  icon?: string;
+  group?: string;
   is_system: boolean;
 }
 

@@ -22,6 +22,8 @@ interface Contact {
 interface Tag {
   id: string;
   name: string;
+  displayName?: string;
+  color?: string;
   is_system: boolean;
 }
 

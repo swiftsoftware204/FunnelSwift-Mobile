@@ -59,13 +59,43 @@ export default function CaptureScreen() {
         setLocation(loc);
       }
       
-      // Load available tags
-      const { data: tags } = await supabase
-        .from('system_tags')
-        .select('id, name, is_system')
+      // Load available tags from dynamic tenant_tags system
+      const { data: tagsData } = await supabase
+        .from('vw_tenant_tags_with_groups')
+        .select('id, tag_name, display_name, color, icon, group_name, group_color')
         .eq('is_active', true);
-      if (tags) {
-        setAvailableTags(tags);
+      if (tagsData && tagsData.length > 0) {
+        const mapped = tagsData.map((t: any) => ({
+          id: t.id,
+          name: t.tag_name,
+          displayName: t.display_name,
+          color: t.color ? `#${t.color.replace('#', '')}` : '#5B4FFF',
+          icon: t.icon || '',
+          group: t.group_name || 'Custom',
+          groupId: t.group_name || 'custom',
+          is_system: true,
+        }));
+        setAvailableTags(mapped);
+      } else {
+        // Fallback: load from tenant_tags directly
+        const { data: fallbackTags } = await supabase
+          .from('tenant_tags')
+          .select('id, tag_name, display_name, color, icon, group_id')
+          .eq('is_active', true)
+          .order('display_name');
+        if (fallbackTags) {
+          const mapped = fallbackTags.map((t: any) => ({
+            id: t.id,
+            name: t.tag_name,
+            displayName: t.display_name,
+            color: t.color ? `#${t.color.replace('#', '')}` : '#5B4FFF',
+            icon: t.icon || '',
+            group: 'Tags',
+            groupId: t.group_id || 'default',
+            is_system: true,
+          }));
+          setAvailableTags(mapped);
+        }
       }
     })();
   }, []);
@@ -110,29 +140,25 @@ export default function CaptureScreen() {
   }
 
   async function addTagsToContact(contactId: string, tags: any[]) {
-    for (const tag of tags) {
-      if (tag.is_system) {
-        await supabase.from('contact_tags').insert({
-          contact_id: contactId,
-          system_tag_id: tag.id,
-        });
-      } else {
-        await supabase.from('contact_tags').insert({
-          contact_id: contactId,
-          tag_id: tag.id,
-        });
-      }
+    // Batch insert tags using tag_name for compatibility with both systems
+    const tagInserts = tags.map(tag => ({
+      contact_id: contactId,
+      tag_name: tag.name,
+    }));
+    
+    if (tagInserts.length > 0) {
+      await supabase.from('contact_tags').insert(tagInserts);
     }
 
-    // Fire webhook for each tag
-    for (const tag of tags) {
+    // Fire webhook for first tag (avoid redundant calls)
+    if (tags.length > 0) {
       await supabase.functions.invoke('tag-trigger-webhook', {
         body: {
           contact_id: contactId,
-          tag_id: tag.id,
-          tag_name: tag.name,
+          tag_name: tags[0].name,
+          tag_count: tags.length,
         },
-      });
+      }).catch(() => {});
     }
   }
 
@@ -487,6 +513,7 @@ export default function CaptureScreen() {
         selectedTags={selectedTags}
         onToggleTag={handleToggleTag}
         onClose={() => setShowTagSelector(false)}
+        availableTags={availableTags}
       />
       
       {showNFC && (

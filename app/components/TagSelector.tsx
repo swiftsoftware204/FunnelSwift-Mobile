@@ -14,9 +14,20 @@ import { useTheme } from '../../lib/ThemeContext';
 export interface Tag {
   id: string;
   name: string;
+  displayName?: string;
   color: string;
   group: string;
+  groupId?: string;
+  icon?: string;
   system?: boolean;
+}
+
+interface TagGroup {
+  groupId: string;
+  groupName: string;
+  groupColor: string;
+  groupIcon: string;
+  tags: Tag[];
 }
 
 interface Props {
@@ -24,11 +35,12 @@ interface Props {
   selectedTags: string[];
   onToggleTag: (tagName: string) => void;
   onClose: () => void;
-  systemTags?: Tag[];
+  availableTags?: Tag[]; // Dynamic tags from API — primary source
+  systemTags?: Tag[]; // Fallback if no API tags
   customTags?: Tag[];
 }
 
-const SYSTEM_TAGS: Tag[] = [
+const FALLBACK_TAGS: Tag[] = [
   { id: 't1', name: 'Hot Lead', color: '#EF4444', group: 'Priority' },
   { id: 't2', name: 'Warm Lead', color: '#F59E0B', group: 'Priority' },
   { id: 't3', name: 'Cold Lead', color: '#6B7280', group: 'Priority' },
@@ -48,26 +60,51 @@ export default function TagSelector({
   selectedTags,
   onToggleTag,
   onClose,
-  systemTags = SYSTEM_TAGS,
+  availableTags,
+  systemTags,
   customTags = [],
 }: Props) {
   const { colors } = useTheme();
   const [search, setSearch] = useState('');
-  const [groupedTags, setGroupedTags] = useState<Record<string, Tag[]>>({});
+  const [groupedTags, setGroupedTags] = useState<TagGroup[]>([]);
 
   useEffect(() => {
-    const allTags = [...systemTags, ...customTags];
-    const filtered = search
-      ? allTags.filter(t => t.name.toLowerCase().includes(search.toLowerCase()))
-      : allTags;
+    // Determine which tags to use: API dynamic tags first, then fallback
+    let tagsToUse: Tag[];
 
-    const grouped: Record<string, Tag[]> = {};
+    if (availableTags && availableTags.length > 0) {
+      tagsToUse = availableTags;
+    } else {
+      tagsToUse = [...(systemTags || FALLBACK_TAGS), ...customTags];
+    }
+
+    // Apply search filter
+    const filtered = search
+      ? tagsToUse.filter(t =>
+          t.name.toLowerCase().includes(search.toLowerCase()) ||
+          (t.displayName?.toLowerCase().includes(search.toLowerCase()))
+        )
+      : tagsToUse;
+
+    // Group tags
+    const groupMap = new Map<string, TagGroup>();
+
     filtered.forEach(tag => {
-      if (!grouped[tag.group]) grouped[tag.group] = [];
-      grouped[tag.group].push(tag);
+      const groupKey = tag.groupId || tag.group;
+      if (!groupMap.has(groupKey)) {
+        groupMap.set(groupKey, {
+          groupId: tag.groupId || groupKey,
+          groupName: tag.group,
+          groupColor: '#64748B',
+          groupIcon: '🔖',
+          tags: [],
+        });
+      }
+      groupMap.get(groupKey)!.tags.push(tag);
     });
-    setGroupedTags(grouped);
-  }, [search, systemTags, customTags]);
+
+    setGroupedTags(Array.from(groupMap.values()));
+  }, [search, availableTags, systemTags, customTags]);
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
@@ -93,13 +130,27 @@ export default function TagSelector({
           />
 
           <ScrollView style={styles.tagList}>
-            {Object.entries(groupedTags).map(([group, tags]) => (
-              <View key={group} style={styles.group}>
-                <Text style={[styles.groupTitle, { color: colors.textMuted }]}>
-                  {group}
+            {groupedTags.length === 0 && (
+              <View style={styles.emptyState}>
+                <Ionicons name="pricetags-outline" size={48} color={colors.textMuted} />
+                <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+                  {search ? 'No tags match your search' : 'No tags available'}
                 </Text>
+                <Text style={[styles.emptyHint, { color: colors.textMuted }]}>
+                  {search ? 'Try a different search term' : 'Tags can be managed from the web app'}
+                </Text>
+              </View>
+            )}
+            {groupedTags.map(group => (
+              <View key={group.groupId} style={styles.group}>
+                <View style={styles.groupHeader}>
+                  <Text style={[styles.groupIcon]}>{group.groupIcon}</Text>
+                  <Text style={[styles.groupTitle, { color: colors.textMuted }]}>
+                    {group.groupName}
+                  </Text>
+                </View>
                 <View style={styles.tagRow}>
-                  {tags.map(tag => {
+                  {group.tags.map(tag => {
                     const isSelected = selectedTags.includes(tag.name);
                     return (
                       <TouchableOpacity
@@ -113,13 +164,16 @@ export default function TagSelector({
                         ]}
                         onPress={() => onToggleTag(tag.name)}
                       >
+                        {tag.icon && (
+                          <Text style={styles.tagIcon}>{tag.icon}</Text>
+                        )}
                         <Text
                           style={[
                             styles.tagText,
                             { color: isSelected ? '#fff' : colors.text },
                           ]}
                         >
-                          {tag.name}
+                          {tag.displayName || tag.name}
                         </Text>
                         {isSelected && (
                           <Ionicons name="checkmark" size={16} color="#fff" />
@@ -189,12 +243,20 @@ const styles = StyleSheet.create({
   group: {
     marginBottom: 16,
   },
+  groupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 6,
+  },
+  groupIcon: {
+    fontSize: 14,
+  },
   groupTitle: {
     fontSize: 13,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 8,
   },
   tagRow: {
     flexDirection: 'row',
@@ -209,6 +271,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     gap: 4,
+  },
+  tagIcon: {
+    fontSize: 12,
   },
   tagText: {
     fontSize: 14,
@@ -234,5 +299,20 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginTop: 12,
+  },
+  emptyHint: {
+    fontSize: 13,
+    marginTop: 4,
+    textAlign: 'center',
   },
 });

@@ -22,6 +22,7 @@ export default function LeadDetailScreen({ route, navigation }: any) {
   const [saving, setSaving] = useState(false);
   const [showTagSelector, setShowTagSelector] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [availableTags, setAvailableTags] = useState<any[]>([]);
   const [editForm, setEditForm] = useState({
     first_name: initialLead.first_name || '',
     last_name: initialLead.last_name || '',
@@ -36,7 +37,27 @@ export default function LeadDetailScreen({ route, navigation }: any) {
 
   useEffect(() => {
     fetchTags();
+    fetchAvailableTags();
   }, []);
+
+  async function fetchAvailableTags() {
+    const { data: tagsData } = await supabase
+      .from('vw_tenant_tags_with_groups')
+      .select('id, tag_name, display_name, color, icon, group_name, group_color')
+      .eq('is_active', true);
+    if (tagsData && tagsData.length > 0) {
+      setAvailableTags(tagsData.map((t: any) => ({
+        id: t.id,
+        name: t.tag_name,
+        displayName: t.display_name,
+        color: t.color ? `#${t.color.replace('#', '')}` : '#5B4FFF',
+        icon: t.icon || '',
+        group: t.group_name || 'Custom',
+        groupId: t.group_name || 'custom',
+        is_system: true,
+      })));
+    }
+  }
 
   async function fetchTags() {
     const { data } = await supabase
@@ -402,6 +423,7 @@ export default function LeadDetailScreen({ route, navigation }: any) {
         selectedTags={selectedTags}
         onToggleTag={handleToggleTag}
         onClose={() => setShowTagSelector(false)}
+        availableTags={availableTags}
       />
     </ScrollView>
   );
