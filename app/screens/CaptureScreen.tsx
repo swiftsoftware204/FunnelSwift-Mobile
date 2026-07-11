@@ -17,6 +17,7 @@ import { useAuth } from '../../lib/AuthContext';
 import { useTheme } from '../../lib/ThemeContext';
 import * as http from '../../lib/http';
 import BusinessCardScanner, { ScannedCardData } from '../components/BusinessCardScanner';
+import QRCodeScanner, { QRScannedData } from '../components/QRCodeScanner';
 import TagSelector from '../components/TagSelector';
 import NFCEventCapture from '../components/NFCEventCapture';
 
@@ -57,6 +58,7 @@ export default function CaptureScreen() {
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  const [showQR, setShowQR] = useState(false);
   const [showTagSelector, setShowTagSelector] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [showNFC, setShowNFC] = useState(false);
@@ -137,6 +139,24 @@ export default function CaptureScreen() {
     if (tags.length > 0) {
       setSelectedTags(tags.map((t: any) => t.name));
     }
+  }
+
+  function handleQRScanComplete(data: QRScannedData) {
+    setShowQR(false);
+
+    const scanned: Record<string, string> = {};
+    if (data.name) scanned.first_name = data.name;
+    if (data.email) scanned.email = data.email;
+    if (data.phone) scanned.phone = data.phone;
+    if (data.company) scanned.company = data.company;
+    if (data.url) scanned.website = data.url;
+    if (data.title) scanned.title = data.title;
+
+    const keys = Object.keys(scanned);
+    setActiveFields([...new Set([...activeFields, ...keys])]);
+    setFieldValues(f => ({ ...f, ...scanned }));
+
+    Alert.alert('QR Scanned', 'Contact info extracted from QR code. Review and save.');
   }
 
   function handleToggleTag(tagName: string) {
@@ -235,6 +255,13 @@ export default function CaptureScreen() {
             >
               <Ionicons name="camera" size={18} color="#fff" />
               <Text style={styles.scanButtonText}>Scan Card</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.scanButton, { backgroundColor: '#10B981', marginLeft: 8 }]}
+              onPress={() => setShowQR(true)}
+            >
+              <Ionicons name="qr-code" size={18} color="#fff" />
+              <Text style={styles.scanButtonText}>Scan QR</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.scanButton, { backgroundColor: '#F59E0B', marginLeft: 8 }]}
@@ -393,6 +420,13 @@ export default function CaptureScreen() {
         onClose={() => setShowTagSelector(false)}
         availableTags={availableTags}
       />
+
+      {showQR && (
+        <QRCodeScanner
+          onScanComplete={handleQRScanComplete}
+          onClose={() => setShowQR(false)}
+        />
+      )}
 
       {showNFC && (
         <NFCEventCapture
