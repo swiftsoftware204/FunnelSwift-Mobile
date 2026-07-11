@@ -20,6 +20,7 @@ import BusinessCardScanner, { ScannedCardData } from '../components/BusinessCard
 import QRCodeScanner, { QRScannedData } from '../components/QRCodeScanner';
 import BulkImportScreen from '../components/BulkImportScreen';
 import PhotoGalleryBatch from '../components/PhotoGalleryBatch';
+import LinkedInGrab from '../components/LinkedInGrab';
 import TagSelector from '../components/TagSelector';
 import NFCEventCapture from '../components/NFCEventCapture';
 
@@ -63,6 +64,7 @@ export default function CaptureScreen() {
   const [showQR, setShowQR] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [showPhotoBatch, setShowPhotoBatch] = useState(false);
+  const [showLinkedIn, setShowLinkedIn] = useState(false);
   const [showTagSelector, setShowTagSelector] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [showNFC, setShowNFC] = useState(false);
@@ -259,6 +261,13 @@ export default function CaptureScreen() {
             >
               <Ionicons name="camera" size={18} color="#fff" />
               <Text style={styles.scanButtonText}>Scan Card</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.scanButton, { backgroundColor: '#0A66C2', marginLeft: 8 }]}
+              onPress={() => setShowLinkedIn(true)}
+            >
+              <Ionicons name="logo-linkedin" size={16} color="#fff" />
+              <Text style={styles.scanButtonText}>LinkedIn</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.scanButton, { backgroundColor: '#EF4444', marginLeft: 8 }]}
@@ -458,6 +467,25 @@ export default function CaptureScreen() {
       {showPhotoBatch && (
         <PhotoGalleryBatch
           onClose={() => setShowPhotoBatch(false)}
+        />
+      )}
+
+      {showLinkedIn && (
+        <LinkedInGrab
+          onClose={() => setShowLinkedIn(false)}
+          onComplete={(data) => {
+            setShowLinkedIn(false);
+            const scanned: Record<string, string> = {};
+            if (data.name) scanned.first_name = data.name;
+            if (data.email) scanned.email = data.email;
+            if (data.phone) scanned.phone = data.phone;
+            if (data.company) scanned.company = data.company;
+            if (data.title) scanned.title = data.title;
+            const keys = Object.keys(scanned);
+            setActiveFields([...new Set([...activeFields, ...keys])]);
+            setFieldValues(f => ({ ...f, ...scanned }));
+            Alert.alert('Profile Grabbed', 'LinkedIn data loaded. Review and save.');
+          }}
         />
       )}
 

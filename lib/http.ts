@@ -162,6 +162,14 @@ export function ocrParseCard(imageBase64: string) {
   });
 }
 
+// LinkedIn profile lookup
+export function linkedinLookup(url: string) {
+  return request<any>('/leads/linkedin-lookup', {
+    method: 'POST',
+    body: JSON.stringify({ url }),
+  });
+}
+
 // Dashboard
 export function getDashboardStats() {
   return request<any>('/dashboard/stats');
