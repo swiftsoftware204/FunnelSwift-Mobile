@@ -16,7 +16,7 @@ import { useAuth } from '../../lib/AuthContext';
 import { useTheme } from '../../lib/ThemeContext';
 import * as http from '../../lib/http';
 
-type Screen = 'login' | 'forgot' | 'reset';
+type Screen = 'login' | 'register' | 'forgot' | 'reset';
 
 export default function LoginScreen({ navigation }: any) {
   const [screen, setScreen] = useState<Screen>('login');
@@ -27,6 +27,10 @@ export default function LoginScreen({ navigation }: any) {
   const [loading, setLoading] = useState(false);
   const [showAccounts, setShowAccounts] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [regName, setRegName] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regTenant, setRegTenant] = useState('');
 
   const { signIn, savedAccounts, switchAccount, removeSavedAccount, signOut } = useAuth();
   const { colors } = useTheme();
@@ -81,6 +85,28 @@ export default function LoginScreen({ navigation }: any) {
     }
   }
 
+  async function handleRegister() {
+    if (!regName || !regEmail || !regPassword) {
+      Alert.alert('Error', 'Name, email, and password are required');
+      return;
+    }
+    if (regPassword.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await http.register(regEmail, regPassword, regName, regTenant || `${regName}'s Business`);
+      await http.setToken(result.token);
+      navigation.replace('Main');
+    } catch (err: any) {
+      Alert.alert('Registration Failed', err.message || 'Could not create account');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleResetPassword() {
     if (!resetToken || !newPassword) {
       Alert.alert('Error', 'Enter both the reset token and new password');
@@ -100,6 +126,91 @@ export default function LoginScreen({ navigation }: any) {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (screen === 'register') {
+    return (
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={[styles.container, { backgroundColor: colors.background }]}
+      >
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => setScreen('login')}>
+            <Ionicons name="arrow-back" size={22} color={colors.text} />
+          </TouchableOpacity>
+
+          <Text style={[styles.title, { color: colors.text }]}>Create Account</Text>
+          <Text style={[styles.subtitle, { color: colors.textMuted, marginBottom: 32 }]}>
+            You'll get a FunnelSwift account that works on both mobile and web
+          </Text>
+
+          <TextInput
+            style={[styles.input, {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              color: colors.text,
+            }]}
+            placeholder="Full Name"
+            placeholderTextColor={colors.textMuted}
+            value={regName}
+            onChangeText={setRegName}
+            autoCapitalize="words"
+          />
+
+          <TextInput
+            style={[styles.input, {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              color: colors.text,
+            }]}
+            placeholder="Email"
+            placeholderTextColor={colors.textMuted}
+            value={regEmail}
+            onChangeText={setRegEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+
+          <TextInput
+            style={[styles.input, {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              color: colors.text,
+            }]}
+            placeholder="Password"
+            placeholderTextColor={colors.textMuted}
+            value={regPassword}
+            onChangeText={setRegPassword}
+            secureTextEntry
+          />
+
+          <TextInput
+            style={[styles.input, {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              color: colors.text,
+            }]}
+            placeholder="Business Name (optional)"
+            placeholderTextColor={colors.textMuted}
+            value={regTenant}
+            onChangeText={setRegTenant}
+            autoCapitalize="words"
+          />
+
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: colors.primary }]}
+            onPress={handleRegister}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Create Account</Text>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
   }
 
   if (screen === 'forgot') {
@@ -270,6 +381,10 @@ export default function LoginScreen({ navigation }: any) {
 
           <TouchableOpacity style={styles.linkRow} onPress={() => setScreen('forgot')}>
             <Text style={[styles.linkText, { color: colors.primary }]}>Forgot Password?</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.linkRow} onPress={() => setScreen('register')}>
+            <Text style={[styles.linkText, { color: colors.primary }]}>Create Account</Text>
           </TouchableOpacity>
 
           {/* Saved Accounts Switcher */}
