@@ -18,6 +18,7 @@ import { useTheme } from '../../lib/ThemeContext';
 import * as http from '../../lib/http';
 import BusinessCardScanner, { ScannedCardData } from '../components/BusinessCardScanner';
 import QRCodeScanner, { QRScannedData } from '../components/QRCodeScanner';
+import BulkImportScreen from '../components/BulkImportScreen';
 import TagSelector from '../components/TagSelector';
 import NFCEventCapture from '../components/NFCEventCapture';
 
@@ -59,6 +60,7 @@ export default function CaptureScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [showQR, setShowQR] = useState(false);
+  const [showBulkImport, setShowBulkImport] = useState(false);
   const [showTagSelector, setShowTagSelector] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [showNFC, setShowNFC] = useState(false);
@@ -264,6 +266,13 @@ export default function CaptureScreen() {
               <Text style={styles.scanButtonText}>Scan QR</Text>
             </TouchableOpacity>
             <TouchableOpacity
+              style={[styles.scanButton, { backgroundColor: '#8B5CF6', marginLeft: 8 }]}
+              onPress={() => setShowBulkImport(true)}
+            >
+              <Ionicons name="cloud-upload" size={18} color="#fff" />
+              <Text style={styles.scanButtonText}>Bulk</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={[styles.scanButton, { backgroundColor: '#F59E0B', marginLeft: 8 }]}
               onPress={() => setShowNFC(true)}
             >
@@ -425,6 +434,15 @@ export default function CaptureScreen() {
         <QRCodeScanner
           onScanComplete={handleQRScanComplete}
           onClose={() => setShowQR(false)}
+        />
+      )}
+
+      {showBulkImport && (
+        <BulkImportScreen
+          onClose={() => setShowBulkImport(false)}
+          onComplete={(count: number) => {
+            if (count > 0) setShowBulkImport(false);
+          }}
         />
       )}
 
