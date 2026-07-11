@@ -1,14 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../lib/AuthContext';
 import { useTheme } from '../../lib/ThemeContext';
 import * as http from '../../lib/http';
+import TagsManager from '../components/TagsManager';
 
 export default function HomeScreen({ navigation }: any) {
   const { user, isSuperAdmin } = useAuth();
   const { colors } = useTheme();
   const [stats, setStats] = useState({ total: 0, today: 0, week: 0 });
+  const [showSettings, setShowSettings] = useState(false);
+  const [showTagsManager, setShowTagsManager] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -45,14 +48,22 @@ export default function HomeScreen({ navigation }: any) {
   ];
 
   return (
+    <>
     <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
-        <Text style={[styles.greeting, { color: colors.text }]}>
+        <View style={styles.headerRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.greeting, { color: colors.text }]}>
           Hello, {user?.email?.split('@')[0] || 'User'}!
         </Text>
         <Text style={[styles.subtitle, { color: colors.textMuted }]}>
           {isSuperAdmin ? 'Admin' : 'Sales Rep'}
-        </Text>
+            </Text>
+          </View>
+          <TouchableOpacity onPress={() => setShowSettings(true)}>
+            <Ionicons name="settings-outline" size={24} color={colors.textMuted} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.statsContainer}>
@@ -91,11 +102,58 @@ export default function HomeScreen({ navigation }: any) {
         </TouchableOpacity>
       ))}
     </ScrollView>
+
+      {/* Settings Modal */}
+      <Modal visible={showSettings} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowSettings(false)}>
+        <View style={[styles.settingsScreen, { backgroundColor: colors.background }]}>
+          <View style={styles.settingsHeader}>
+            <TouchableOpacity onPress={() => setShowSettings(false)}>
+              <Ionicons name="close" size={28} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.settingsTitle, { color: colors.text }]}>Settings</Text>
+            <View style={{ width: 28 }} />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.settingsItem, { backgroundColor: colors.surface }]}
+            onPress={() => { setShowSettings(false); setShowTagsManager(true); }}
+          >
+            <View style={[styles.settingsIcon, { backgroundColor: colors.primary + '20' }]}>
+              <Ionicons name="pricetags" size={22} color={colors.primary} />
+            </View>
+            <View style={styles.settingsItemInfo}>
+              <Text style={[styles.settingsItemTitle, { color: colors.text }]}>Manage Tags</Text>
+              <Text style={[styles.settingsItemDesc, { color: colors.textMuted }]}>Add, delete tag groups and tags</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
+      {/* Tags Manager Modal */}
+      <Modal visible={showTagsManager} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowTagsManager(false)}>
+        <TagsManager onClose={() => setShowTagsManager(false)} />
+      </Modal>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  settingsScreen: { flex: 1 },
+  settingsHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingTop: 60, paddingHorizontal: 20, paddingBottom: 16,
+  },
+  settingsTitle: { fontSize: 20, fontWeight: '700' },
+  settingsItem: {
+    flexDirection: 'row', alignItems: 'center', padding: 16,
+    marginHorizontal: 16, marginBottom: 8, borderRadius: 12, gap: 14,
+  },
+  settingsIcon: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  settingsItemInfo: { flex: 1 },
+  settingsItemTitle: { fontSize: 16, fontWeight: '600' },
+  settingsItemDesc: { fontSize: 12, marginTop: 2 },
   container: { flex: 1, padding: 16 },
+  headerRow: { flexDirection: 'row', alignItems: 'flex-start' },
   header: { marginBottom: 24 },
   greeting: { fontSize: 26, fontWeight: 'bold' },
   subtitle: { fontSize: 15, marginTop: 4 },

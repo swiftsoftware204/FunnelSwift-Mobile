@@ -110,8 +110,34 @@ export function getTags() {
   return request<any[]>('/tags');
 }
 
+export function createTag(data: Record<string, any>) {
+  return request<any>('/tags', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteTag(id: string) {
+  return request<any>(`/tags/${id}`, {
+    method: 'DELETE',
+  });
+}
+
 export function getTagGroups() {
   return request<any[]>('/tag-groups');
+}
+
+export function createTagGroup(data: Record<string, any>) {
+  return request<any>('/tag-groups', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteTagGroup(id: string) {
+  return request<any>(`/tag-groups/${id}`, {
+    method: 'DELETE',
+  });
 }
 
 // Leads
