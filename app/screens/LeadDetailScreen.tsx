@@ -12,131 +12,102 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../lib/ThemeContext';
-import { supabase, Lead } from '../../lib/supabase';
+import * as http from '../../lib/http';
 import TagSelector from '../components/TagSelector';
 
+const STAGES = ['New', 'Contacted', 'Qualified', 'Proposal', 'Negotiation', 'Closed Won', 'Closed Lost'];
+
+function getStageColor(stage: string) {
+  switch (stage) {
+    case 'New': return '#5B4FFF';
+    case 'Contacted': return '#F59E0B';
+    case 'Qualified': return '#22C55E';
+    case 'Proposal': return '#8B5CF6';
+    case 'Negotiation': return '#3B82F6';
+    case 'Closed Won': return '#22C55E';
+    case 'Closed Lost': return '#EF4444';
+    default: return '#94A3B8';
+  }
+}
+
+const FIELD_CONFIG: Record<string, { label: string; icon: string; keyboard?: any }> = {
+  name: { label: 'Full Name', icon: 'person' },
+  email: { label: 'Email', icon: 'mail', keyboard: 'email-address' },
+  phone: { label: 'Phone', icon: 'call', keyboard: 'phone-pad' },
+  company: { label: 'Company', icon: 'business' },
+  source: { label: 'Source', icon: 'flag' },
+  notes: { label: 'Notes', icon: 'document-text' },
+};
+
 export default function LeadDetailScreen({ route, navigation }: any) {
-  const { lead: initialLead } = route.params as { lead: Lead };
-  const [lead, setLead] = useState<Lead>(initialLead);
+  const initialLead = route.params?.lead || {};
+  const [lead, setLead] = useState<any>(initialLead);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showTagSelector, setShowTagSelector] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [availableTags, setAvailableTags] = useState<any[]>([]);
-  const [editForm, setEditForm] = useState({
-    first_name: initialLead.first_name || '',
-    last_name: initialLead.last_name || '',
-    email: initialLead.email || '',
-    phone: initialLead.phone || '',
-    business_name: initialLead.business_name || '',
-    website: initialLead.website || '',
-    notes: initialLead.notes || '',
-    status: initialLead.status,
-  });
+  const [editForm, setEditForm] = useState<Record<string, string>>({});
+
   const { colors } = useTheme();
 
   useEffect(() => {
-    fetchTags();
-    fetchAvailableTags();
+    fetchTagsAndPopulate();
   }, []);
 
-  async function fetchAvailableTags() {
-    const { data: tagsData } = await supabase
-      .from('vw_tenant_tags_with_groups')
-      .select('id, tag_name, display_name, color, icon, group_name, group_color')
-      .eq('is_active', true);
-    if (tagsData && tagsData.length > 0) {
-      setAvailableTags(tagsData.map((t: any) => ({
-        id: t.id,
-        name: t.tag_name,
-        displayName: t.display_name,
-        color: t.color ? `#${t.color.replace('#', '')}` : '#5B4FFF',
-        icon: t.icon || '',
-        group: t.group_name || 'Custom',
-        groupId: t.group_name || 'custom',
-        is_system: true,
-      })));
-    }
-  }
-
-  async function fetchTags() {
-    const { data } = await supabase
-      .from('contact_tags')
-      .select('tag_name')
-      .eq('contact_id', lead.id);
-
-    if (data) {
-      setSelectedTags(data.map(t => t.tag_name));
-    }
-  }
-
-  function getStatusColor(status: string) {
-    switch (status) {
-      case 'new': return colors.primary;
-      case 'contacted': return colors.warning;
-      case 'qualified': return colors.success;
-      case 'converted': return '#22C55E';
-      case 'lost': return colors.error;
-      default: return colors.textMuted;
-    }
-  }
-
-  const STATUSES = ['new', 'contacted', 'qualified', 'converted', 'lost'];
-
-  async function callPhone() {
-    if (lead.phone) {
-      await Linking.openURL(`tel:${lead.phone}`);
-    }
-  }
-
-  async function sendEmail() {
-    if (lead.email) {
-      await Linking.openURL(`mailto:${lead.email}`);
-    }
-  }
-
-  async function openWebsite() {
-    if (lead.website) {
-      await Linking.openURL(lead.website.startsWith('http') ? lead.website : `https://${lead.website}`);
-    }
-  }
-
-  async function handleSave() {
-    setSaving(true);
-    const updates = {
-      first_name: editForm.first_name || null,
-      last_name: editForm.last_name || null,
-      email: editForm.email || null,
-      phone: editForm.phone || null,
-      business_name: editForm.business_name || null,
-      website: editForm.website || null,
-      notes: editForm.notes || null,
-      status: editForm.status,
-    };
-
-    const { error } = await supabase
-      .from('contacts')
-      .update(updates)
-      .eq('id', lead.id);
-
-    if (error) {
-      Alert.alert('Error', error.message);
-    } else {
-      // Sync tags
-      await supabase.from('contact_tags').delete().eq('contact_id', lead.id);
-      if (selectedTags.length > 0) {
-        const tagInserts = selectedTags.map(tagName => ({
-          contact_id: lead.id,
-          tag_name: tagName,
-        }));
-        await supabase.from('contact_tags').insert(tagInserts);
+  async function fetchTagsAndPopulate() {
+    // Fetch tags from API
+    try {
+      const tags = await http.getTags();
+      if (tags && tags.length > 0) {
+        setAvailableTags(tags.map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          displayName: t.name,
+          color: t.color || '#5B4FFF',
+          group: 'Tags',
+          groupId: t.group_id || 'default',
+          is_system: t.is_system,
+        })));
       }
+    } catch {}
 
-      setLead({ ...lead, ...updates } as Lead);
-      setEditing(false);
-      Alert.alert('Saved', 'Lead updated successfully.');
-    }
-    setSaving(false);
+    // Parse existing tags
+    const existingTags = lead.tags
+      ? (Array.isArray(lead.tags) ? lead.tags : [])
+      : [];
+    setSelectedTags(existingTags);
+
+    // Populate edit form from lead data
+    setEditForm({
+      name: lead.name || '',
+      email: lead.email || '',
+      phone: lead.phone || '',
+      company: lead.company || '',
+      source: lead.source || '',
+      notes: lead.notes || '',
+    });
+  }
+
+  async function fetchFreshLead() {
+    try {
+      const fresh = await http.getLead(lead.id);
+      if (fresh) {
+        setLead(fresh);
+        const existingTags = fresh.tags
+          ? (Array.isArray(fresh.tags) ? fresh.tags : [])
+          : [];
+        setSelectedTags(existingTags);
+        setEditForm({
+          name: fresh.name || '',
+          email: fresh.email || '',
+          phone: fresh.phone || '',
+          company: fresh.company || '',
+          source: fresh.source || '',
+          notes: fresh.notes || '',
+        });
+      }
+    } catch {}
   }
 
   function handleToggleTag(tagName: string) {
@@ -147,163 +118,141 @@ export default function LeadDetailScreen({ route, navigation }: any) {
     );
   }
 
+  async function handleSave() {
+    setSaving(true);
+    const payload: Record<string, any> = {};
+
+    // Only include changed fields
+    if (editForm.name !== (lead.name || '')) payload.name = editForm.name;
+    if (editForm.email !== (lead.email || '')) payload.email = editForm.email;
+    if (editForm.phone !== (lead.phone || '')) payload.phone = editForm.phone;
+    if (editForm.company !== (lead.company || '')) payload.company = editForm.company;
+    if (editForm.source !== (lead.source || '')) payload.source = editForm.source;
+    if (editForm.notes !== (lead.notes || '')) payload.notes = editForm.notes;
+
+    // Tags
+    const currentTags = lead.tags ? (Array.isArray(lead.tags) ? lead.tags : []) : [];
+    const tagsChanged = JSON.stringify(currentTags.sort()) !== JSON.stringify([...selectedTags].sort());
+    if (tagsChanged) {
+      payload.tags = selectedTags;
+    }
+
+    try {
+      await http.updateLead(lead.id, payload);
+      await fetchFreshLead();
+      setEditing(false);
+      Alert.alert('Saved', 'Lead updated successfully.');
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to update lead.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const displayName = lead.name || lead.email || 'Unknown';
+  const stage = lead.stage || lead.status || 'New';
+
+  // Determine visible fields (only show what has data)
+  const visibleFields = Object.entries(FIELD_CONFIG).filter(([key]) => {
+    if (editing) return true; // Show all in edit mode
+    return !!lead[key];
+  });
+
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { backgroundColor: colors.surface }]}>
         {editing ? (
           <TextInput
             style={[styles.editTitle, { color: colors.text, borderBottomColor: colors.border }]}
-            value={editForm.business_name}
-            onChangeText={t => setEditForm(f => ({ ...f, business_name: t }))}
-            placeholder="Business Name"
+            value={editForm.name}
+            onChangeText={t => setEditForm(f => ({ ...f, name: t }))}
+            placeholder="Full Name"
             placeholderTextColor={colors.textMuted}
           />
         ) : (
-          <Text style={[styles.businessName, { color: colors.text }]}>
-            {lead.business_name || 'Unknown Business'}
-          </Text>
+          <Text style={[styles.leadName, { color: colors.text }]}>{displayName}</Text>
         )}
 
-        {/* Status Selector */}
         {editing ? (
-          <View style={styles.statusSelector}>
-            {STATUSES.map(s => (
+          <View style={styles.stageSelector}>
+            {STAGES.map(s => (
               <TouchableOpacity
                 key={s}
                 style={[
-                  styles.statusOption,
-                  {
-                    backgroundColor: editForm.status === s ? getStatusColor(s) : colors.surfaceLight,
-                  },
+                  styles.stageOption,
+                  { backgroundColor: editForm.stage === s ? getStageColor(s) : colors.surfaceLight },
                 ]}
-                onPress={() => setEditForm(f => ({ ...f, status: s }))}
+                onPress={() => setEditForm(f => ({ ...f, stage: s }))}
               >
                 <Text style={[
-                  styles.statusOptionText,
-                  { color: editForm.status === s ? '#fff' : colors.text },
+                  styles.stageOptionText,
+                  { color: editForm.stage === s ? '#fff' : colors.text },
                 ]}>{s}</Text>
               </TouchableOpacity>
             ))}
           </View>
         ) : (
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(lead.status) + '20' }]}>
-            <Text style={[styles.statusText, { color: getStatusColor(lead.status) }]}>
-              {lead.status}
-            </Text>
+          <View style={[styles.stageBadge, { backgroundColor: getStageColor(stage) + '20' }]}>
+            <Text style={[styles.stageText, { color: getStageColor(stage) }]}>{stage}</Text>
           </View>
         )}
 
-        <Text style={[styles.leadScore, { color: colors.primary }]}>
-          Lead Score: {lead.lead_score}/100
-        </Text>
+        {lead.score != null && (
+          <Text style={[styles.score, { color: colors.primary }]}>Score: {lead.score}</Text>
+        )}
       </View>
 
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Contact Information</Text>
-        
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Contact</Text>
         <View style={[styles.card, { backgroundColor: colors.surface }]}>
-          {editing ? (
-            <>
-              <View style={styles.row}>
-                <TextInput
-                  style={[styles.editInput, styles.halfInput, { 
-                    backgroundColor: colors.surfaceLight, borderColor: colors.border, color: colors.text 
-                  }]}
-                  placeholder="First Name"
-                  placeholderTextColor={colors.textMuted}
-                  value={editForm.first_name}
-                  onChangeText={t => setEditForm(f => ({ ...f, first_name: t }))}
-                />
-                <TextInput
-                  style={[styles.editInput, styles.halfInput, { 
-                    backgroundColor: colors.surfaceLight, borderColor: colors.border, color: colors.text 
-                  }]}
-                  placeholder="Last Name"
-                  placeholderTextColor={colors.textMuted}
-                  value={editForm.last_name}
-                  onChangeText={t => setEditForm(f => ({ ...f, last_name: t }))}
-                />
-              </View>
-              <TextInput
-                style={[styles.editInput, { 
-                  backgroundColor: colors.surfaceLight, borderColor: colors.border, color: colors.text 
-                }]}
-                placeholder="Phone"
-                placeholderTextColor={colors.textMuted}
-                value={editForm.phone}
-                onChangeText={t => setEditForm(f => ({ ...f, phone: t }))}
-                keyboardType="phone-pad"
-              />
-              <TextInput
-                style={[styles.editInput, { 
-                  backgroundColor: colors.surfaceLight, borderColor: colors.border, color: colors.text 
-                }]}
-                placeholder="Email"
-                placeholderTextColor={colors.textMuted}
-                value={editForm.email}
-                onChangeText={t => setEditForm(f => ({ ...f, email: t }))}
-                keyboardType="email-address"
-              />
-              <TextInput
-                style={[styles.editInput, { 
-                  backgroundColor: colors.surfaceLight, borderColor: colors.border, color: colors.text 
-                }]}
-                placeholder="Website"
-                placeholderTextColor={colors.textMuted}
-                value={editForm.website}
-                onChangeText={t => setEditForm(f => ({ ...f, website: t }))}
-                keyboardType="url"
-              />
-            </>
-          ) : (
-            <>
-              <View style={styles.infoRow}>
-                <Ionicons name="person" size={20} color={colors.textMuted} />
-                <Text style={[styles.infoText, { color: colors.text }]}>
-                  {lead.first_name} {lead.last_name}
-                </Text>
-              </View>
-
-              {lead.phone && (
-                <TouchableOpacity style={styles.infoRow} onPress={callPhone}>
-                  <Ionicons name="call" size={20} color={colors.primary} />
-                  <Text style={[styles.infoText, { color: colors.primary }]}>{lead.phone}</Text>
-                  <Ionicons name="open-outline" size={16} color={colors.textMuted} />
-                </TouchableOpacity>
-              )}
-
-              {lead.email && (
-                <TouchableOpacity style={styles.infoRow} onPress={sendEmail}>
-                  <Ionicons name="mail" size={20} color={colors.primary} />
-                  <Text style={[styles.infoText, { color: colors.primary }]}>{lead.email}</Text>
-                  <Ionicons name="open-outline" size={16} color={colors.textMuted} />
-                </TouchableOpacity>
-              )}
-
-              {lead.website && (
-                <TouchableOpacity style={styles.infoRow} onPress={openWebsite}>
-                  <Ionicons name="globe" size={20} color={colors.primary} />
-                  <Text style={[styles.infoText, { color: colors.primary }]}>{lead.website}</Text>
-                  <Ionicons name="open-outline" size={16} color={colors.textMuted} />
-                </TouchableOpacity>
-              )}
-
-              {lead.industry && (
-                <View style={styles.infoRow}>
-                  <Ionicons name="business" size={20} color={colors.textMuted} />
-                  <Text style={[styles.infoText, { color: colors.text }]}>{lead.industry}</Text>
+          {visibleFields.map(([key, config]) => {
+            if (key === 'notes') return null; // Notes below
+            if (editing) {
+              return (
+                <View key={key} style={styles.editRow}>
+                  <TextInput
+                    style={[styles.editInput, {
+                      backgroundColor: colors.surfaceLight,
+                      borderColor: colors.border,
+                      color: colors.text,
+                    }]}
+                    placeholder={config.label}
+                    placeholderTextColor={colors.textMuted}
+                    value={editForm[key] || ''}
+                    onChangeText={t => setEditForm(f => ({ ...f, [key]: t }))}
+                    keyboardType={config.keyboard as any}
+                    autoCapitalize="none"
+                  />
                 </View>
-              )}
-            </>
-          )}
+              );
+            }
+
+            const value = lead[key];
+            if (!value) return null;
+
+            const isClickable = key === 'email' || key === 'phone';
+            return (
+              <TouchableOpacity
+                key={key}
+                style={styles.infoRow}
+                onPress={() => {
+                  if (key === 'email') Linking.openURL(`mailto:${value}`);
+                  if (key === 'phone') Linking.openURL(`tel:${value}`);
+                }}
+                disabled={!isClickable}
+              >
+                <Ionicons name={config.icon as any} size={18} color={isClickable ? colors.primary : colors.textMuted} />
+                <Text style={[styles.infoText, { color: isClickable ? colors.primary : colors.text }]}>{value}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </View>
 
-      {/* Tags Section */}
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Tags</Text>
         <TouchableOpacity
-          style={[styles.card, styles.tagSelectorCard, { backgroundColor: colors.surface }]}
+          style={[styles.card, styles.tagCard, { backgroundColor: colors.surface }]}
           onPress={() => setShowTagSelector(true)}
         >
           <View style={styles.tagRow}>
@@ -314,33 +263,11 @@ export default function LeadDetailScreen({ route, navigation }: any) {
                 </View>
               ))
             ) : (
-              <Text style={[styles.noTagsText, { color: colors.textMuted }]}>
-                No tags yet — tap to add
-              </Text>
+              <Text style={[styles.noTagsText, { color: colors.textMuted }]}>No tags yet — tap to add</Text>
             )}
           </View>
-          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
         </TouchableOpacity>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Lead Details</Text>
-        
-        <View style={[styles.card, { backgroundColor: colors.surface }]}>
-          <View style={styles.infoRow}>
-            <Ionicons name="flag" size={20} color={colors.textMuted} />
-            <Text style={[styles.label, { color: colors.textMuted }]}>Source:</Text>
-            <Text style={[styles.value, { color: colors.text }]}>{lead.source}</Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Ionicons name="calendar" size={20} color={colors.textMuted} />
-            <Text style={[styles.label, { color: colors.textMuted }]}>Captured:</Text>
-            <Text style={[styles.value, { color: colors.text }]}>
-              {new Date(lead.created_at).toLocaleDateString()}
-            </Text>
-          </View>
-        </View>
       </View>
 
       {/* Notes */}
@@ -348,15 +275,17 @@ export default function LeadDetailScreen({ route, navigation }: any) {
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Notes</Text>
         {editing ? (
           <TextInput
-            style={[styles.editInput, styles.editNotes, { 
-              backgroundColor: colors.surfaceLight, borderColor: colors.border, color: colors.text 
+            style={[styles.editInput, styles.editNotes, {
+              backgroundColor: colors.surfaceLight,
+              borderColor: colors.border,
+              color: colors.text,
             }]}
             placeholder="Add notes..."
             placeholderTextColor={colors.textMuted}
-            value={editForm.notes}
+            value={editForm.notes || ''}
             onChangeText={t => setEditForm(f => ({ ...f, notes: t }))}
             multiline
-            numberOfLines={6}
+            numberOfLines={5}
             textAlignVertical="top"
           />
         ) : (
@@ -368,11 +297,27 @@ export default function LeadDetailScreen({ route, navigation }: any) {
         )}
       </View>
 
-      {/* Action Buttons */}
+      {/* Dates */}
+      <View style={[styles.card, { backgroundColor: colors.surface }]}>
+        <View style={styles.infoRow}>
+          <Ionicons name="calendar" size={16} color={colors.textMuted} />
+          <Text style={[styles.infoText, { color: colors.textMuted, fontSize: 13 }]}>
+            Created: {lead.created_at ? new Date(lead.created_at).toLocaleDateString() : 'N/A'}
+          </Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Ionicons name="refresh" size={16} color={colors.textMuted} />
+          <Text style={[styles.infoText, { color: colors.textMuted, fontSize: 13 }]}>
+            Updated: {lead.updated_at ? new Date(lead.updated_at).toLocaleDateString() : 'N/A'}
+          </Text>
+        </View>
+      </View>
+
+      {/* Actions */}
       {editing ? (
         <View style={styles.editActions}>
           <TouchableOpacity
-            style={[styles.editButton, { backgroundColor: colors.success }]}
+            style={[styles.actionBtn, { backgroundColor: colors.success }]}
             onPress={handleSave}
             disabled={saving}
           >
@@ -380,40 +325,40 @@ export default function LeadDetailScreen({ route, navigation }: any) {
               <ActivityIndicator color="#fff" />
             ) : (
               <>
-                <Ionicons name="checkmark" size={20} color="#fff" />
-                <Text style={styles.editButtonText}>Save Changes</Text>
+                <Ionicons name="checkmark" size={18} color="#fff" />
+                <Text style={styles.actionBtnText}>Save</Text>
               </>
             )}
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.editButton, { backgroundColor: colors.surface }]}
-            onPress={() => setEditing(false)}
+            style={[styles.actionBtn, { backgroundColor: colors.surface }]}
+            onPress={() => { setEditing(false); fetchFreshLead(); }}
           >
-            <Text style={[styles.editButtonText, { color: colors.text }]}>Cancel</Text>
+            <Text style={[styles.actionBtnText, { color: colors.text }]}>Cancel</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <>
           <View style={styles.actions}>
-            <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.primary }]}>
-              <Ionicons name="call" size={20} color="#fff" />
-              <Text style={styles.actionButtonText}>Call Now</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.success }]}>
-              <Ionicons name="logo-whatsapp" size={20} color="#fff" />
-              <Text style={styles.actionButtonText}>WhatsApp</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.surface }]}>
-              <Ionicons name="mail" size={20} color={colors.text} />
-              <Text style={[styles.actionButtonText, { color: colors.text }]}>Email</Text>
-            </TouchableOpacity>
+            {lead.phone && (
+              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.primary }]} onPress={() => Linking.openURL(`tel:${lead.phone}`)}>
+                <Ionicons name="call" size={18} color="#fff" />
+                <Text style={styles.actionBtnText}>Call</Text>
+              </TouchableOpacity>
+            )}
+            {lead.email && (
+              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.surface }]} onPress={() => Linking.openURL(`mailto:${lead.email}`)}>
+                <Ionicons name="mail" size={18} color={colors.text} />
+                <Text style={[styles.actionBtnText, { color: colors.text }]}>Email</Text>
+              </TouchableOpacity>
+            )}
           </View>
           <TouchableOpacity
-            style={[styles.editButton, { backgroundColor: colors.primary, marginHorizontal: 16, marginBottom: 32 }]}
+            style={[styles.editTrigger, { backgroundColor: colors.primary }]}
             onPress={() => setEditing(true)}
           >
-            <Ionicons name="create" size={20} color="#fff" />
-            <Text style={styles.editButtonText}>Edit Lead</Text>
+            <Ionicons name="create" size={18} color="#fff" />
+            <Text style={styles.actionBtnText}>Edit Lead</Text>
           </TouchableOpacity>
         </>
       )}
@@ -430,174 +375,33 @@ export default function LeadDetailScreen({ route, navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    padding: 24,
-    alignItems: 'center',
-  },
-  businessName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  editTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    borderBottomWidth: 1,
-    marginBottom: 12,
-    paddingBottom: 8,
-    width: '100%',
-  },
-  statusBadge: {
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginBottom: 12,
-  },
-  statusText: {
-    fontSize: 14,
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  statusSelector: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 6,
-    marginBottom: 12,
-  },
-  statusOption: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  statusOptionText: {
-    fontSize: 12,
-    fontWeight: '500',
-    textTransform: 'capitalize',
-  },
-  leadScore: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  section: {
-    paddingHorizontal: 16,
-    marginTop: 24,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  card: {
-    padding: 16,
-    borderRadius: 12,
-  },
-  tagSelectorCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  tagRow: {
-    flex: 1,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-  },
-  miniTag: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  miniTagText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  noTagsText: {
-    fontSize: 14,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  infoText: {
-    fontSize: 16,
-    marginLeft: 12,
-    flex: 1,
-  },
-  label: {
-    fontSize: 14,
-    marginLeft: 12,
-    width: 80,
-  },
-  value: {
-    fontSize: 14,
-    flex: 1,
-  },
-  notesText: {
-    fontSize: 16,
-    lineHeight: 24,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  halfInput: {
-    flex: 1,
-  },
-  editInput: {
-    height: 48,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-    fontSize: 16,
-  },
-  editNotes: {
-    height: 140,
-    paddingTop: 12,
-  },
-  actions: {
-    flexDirection: 'row',
-    padding: 16,
-    gap: 12,
-    marginTop: 24,
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-    borderRadius: 8,
-    gap: 8,
-  },
-  actionButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  editActions: {
-    padding: 16,
-    gap: 12,
-    marginTop: 24,
-    marginBottom: 32,
-  },
-  editButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 14,
-    borderRadius: 10,
-    gap: 8,
-  },
-  editButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  container: { flex: 1 },
+  header: { padding: 20, alignItems: 'center' },
+  leadName: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
+  editTitle: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', borderBottomWidth: 1, marginBottom: 10, paddingBottom: 6, width: '100%' },
+  stageBadge: { paddingHorizontal: 14, paddingVertical: 5, borderRadius: 14, marginBottom: 8 },
+  stageText: { fontSize: 13, fontWeight: '600' },
+  stageSelector: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 5, marginBottom: 10 },
+  stageOption: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
+  stageOptionText: { fontSize: 11, fontWeight: '500' },
+  score: { fontSize: 14, fontWeight: '600' },
+  section: { paddingHorizontal: 16, marginTop: 20 },
+  sectionTitle: { fontSize: 16, fontWeight: '600', marginBottom: 10 },
+  card: { padding: 14, borderRadius: 10, marginBottom: 10 },
+  tagCard: { flexDirection: 'row', alignItems: 'center' },
+  tagRow: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
+  miniTag: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8 },
+  miniTagText: { fontSize: 11, fontWeight: '500' },
+  noTagsText: { fontSize: 13 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
+  infoText: { fontSize: 14, marginLeft: 10, flex: 1 },
+  notesText: { fontSize: 14, lineHeight: 22 },
+  editRow: { marginBottom: 8 },
+  editInput: { height: 44, borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, fontSize: 15, marginBottom: 8 },
+  editNotes: { height: 120, paddingTop: 10 },
+  actions: { flexDirection: 'row', paddingHorizontal: 16, gap: 10, marginTop: 16 },
+  editActions: { paddingHorizontal: 16, gap: 10, marginTop: 16, marginBottom: 32 },
+  actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, gap: 6 },
+  actionBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  editTrigger: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginHorizontal: 16, marginTop: 10, marginBottom: 32, padding: 12, borderRadius: 8, gap: 6 },
 });

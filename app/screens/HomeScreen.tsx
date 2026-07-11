@@ -1,12 +1,31 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../lib/AuthContext';
 import { useTheme } from '../../lib/ThemeContext';
+import * as http from '../../lib/http';
 
 export default function HomeScreen({ navigation }: any) {
   const { user, isSuperAdmin } = useAuth();
   const { colors } = useTheme();
+  const [stats, setStats] = useState({ total: 0, today: 0, week: 0 });
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await http.getDashboardStats();
+        if (data) {
+          setStats({
+            total: data.total_leads || data.total || 0,
+            today: data.today_leads || data.today || 0,
+            week: data.week_leads || data.week || 0,
+          });
+        }
+      } catch {
+        // silent
+      }
+    })();
+  }, []);
 
   const quickActions = [
     {
@@ -23,13 +42,6 @@ export default function HomeScreen({ navigation }: any) {
       onPress: () => navigation.navigate('Leads'),
       color: colors.success,
     },
-    {
-      icon: 'trending-up' as const,
-      title: 'Analytics',
-      description: 'View performance stats',
-      onPress: () => {},
-      color: colors.warning,
-    },
   ];
 
   return (
@@ -39,22 +51,22 @@ export default function HomeScreen({ navigation }: any) {
           Hello, {user?.email?.split('@')[0] || 'User'}!
         </Text>
         <Text style={[styles.subtitle, { color: colors.textMuted }]}>
-          {isSuperAdmin ? 'Super Admin' : 'Sales Rep'}
+          {isSuperAdmin ? 'Admin' : 'Sales Rep'}
         </Text>
       </View>
 
       <View style={styles.statsContainer}>
         <View style={[styles.statCard, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.statNumber, { color: colors.primary }]}>0</Text>
-          <Text style={[styles.statLabel, { color: colors.textMuted }]}>Leads Today</Text>
+          <Text style={[styles.statNumber, { color: colors.primary }]}>{stats.today}</Text>
+          <Text style={[styles.statLabel, { color: colors.textMuted }]}>Today</Text>
         </View>
         <View style={[styles.statCard, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.statNumber, { color: colors.success }]}>0</Text>
+          <Text style={[styles.statNumber, { color: colors.success }]}>{stats.week}</Text>
           <Text style={[styles.statLabel, { color: colors.textMuted }]}>This Week</Text>
         </View>
         <View style={[styles.statCard, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.statNumber, { color: colors.warning }]}>0</Text>
-          <Text style={[styles.statLabel, { color: colors.textMuted }]}>This Month</Text>
+          <Text style={[styles.statNumber, { color: colors.warning }]}>{stats.total}</Text>
+          <Text style={[styles.statLabel, { color: colors.textMuted }]}>Total</Text>
         </View>
       </View>
 
@@ -67,7 +79,7 @@ export default function HomeScreen({ navigation }: any) {
           onPress={action.onPress}
         >
           <View style={[styles.iconContainer, { backgroundColor: action.color + '20' }]}>
-            <Ionicons name={action.icon} size={28} color={action.color} />
+            <Ionicons name={action.icon} size={26} color={action.color} />
           </View>
           <View style={styles.actionText}>
             <Text style={[styles.actionTitle, { color: colors.text }]}>{action.title}</Text>
@@ -75,7 +87,7 @@ export default function HomeScreen({ navigation }: any) {
               {action.description}
             </Text>
           </View>
-          <Ionicons name="chevron-forward" size={24} color={colors.textMuted} />
+          <Ionicons name="chevron-forward" size={22} color={colors.textMuted} />
         </TouchableOpacity>
       ))}
     </ScrollView>
@@ -83,69 +95,21 @@ export default function HomeScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-  },
-  header: {
-    marginBottom: 24,
-  },
-  greeting: {
-    fontSize: 28,
-    fontWeight: 'bold',
-  },
-  subtitle: {
-    fontSize: 16,
-    marginTop: 4,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 24,
-  },
-  statCard: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 32,
-    fontWeight: 'bold',
-  },
-  statLabel: {
-    fontSize: 12,
-    marginTop: 4,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 16,
-  },
+  container: { flex: 1, padding: 16 },
+  header: { marginBottom: 24 },
+  greeting: { fontSize: 26, fontWeight: 'bold' },
+  subtitle: { fontSize: 15, marginTop: 4 },
+  statsContainer: { flexDirection: 'row', gap: 12, marginBottom: 24 },
+  statCard: { flex: 1, padding: 16, borderRadius: 12, alignItems: 'center' },
+  statNumber: { fontSize: 28, fontWeight: 'bold' },
+  statLabel: { fontSize: 11, marginTop: 4 },
+  sectionTitle: { fontSize: 18, fontWeight: '600', marginBottom: 16 },
   actionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
+    flexDirection: 'row', alignItems: 'center',
+    padding: 14, borderRadius: 12, marginBottom: 12,
   },
-  iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  actionText: {
-    flex: 1,
-    marginLeft: 16,
-  },
-  actionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  actionDescription: {
-    fontSize: 14,
-    marginTop: 2,
-  },
+  iconContainer: { width: 50, height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  actionText: { flex: 1, marginLeft: 14 },
+  actionTitle: { fontSize: 16, fontWeight: '600' },
+  actionDescription: { fontSize: 13, marginTop: 2 },
 });

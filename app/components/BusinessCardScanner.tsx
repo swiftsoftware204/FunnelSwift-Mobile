@@ -13,7 +13,6 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../lib/ThemeContext';
-import { supabase } from '../../lib/supabase';
 
 export interface ScannedCardData {
   business_name?: string;
@@ -92,38 +91,118 @@ export default function BusinessCardScanner({ onScanComplete, onClose, available
   async function processImage(base64: string) {
     setProcessing(true);
     try {
-      // Use backend OCR API
+      // Try backend OCR first
       const response = await fetch('https://funnelswift.com/api/ocr/parse-card', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageBase64: base64 }),
       });
 
-      const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.error || 'OCR failed');
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.extracted) {
+          const data: ScannedCardData = {
+            business_name: result.extracted.businessName || '',
+            first_name: result.extracted.firstName || '',
+            last_name: result.extracted.lastName || '',
+            email: result.extracted.email || '',
+            phone: result.extracted.phone || '',
+            website: result.extracted.website || '',
+            title: result.extracted.title || '',
+          };
+          setScannedData(data);
+          setShowTagSelector(true);
+          return;
+        }
       }
 
-      const data: ScannedCardData = {
-        business_name: result.extracted.businessName || '',
-        first_name: result.extracted.firstName || '',
-        last_name: result.extracted.lastName || '',
-        email: result.extracted.email || '',
-        phone: result.extracted.phone || '',
-        website: result.extracted.website || '',
-        title: result.extracted.title || '',
-      };
+      // Fallback: use Google Cloud Vision API directly
+      const visionKey = ''; // Set via environment or config
+      if (visionKey) {
+        const visionResponse = await fetch(
+          `https://vision.googleapis.com/v1/images:annotate?key=${visionKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              requests: [{
+                image: { content: base64 },
+                features: [{ type: 'DOCUMENT_TEXT_DETECTION', maxResults: 1 }],
+              }],
+            }),
+          }
+        );
 
-      setScannedData(data);
-      setShowTagSelector(true);
+        if (visionResponse.ok) {
+          const visionData = await visionResponse.json();
+          const text = visionData.responses?.[0]?.fullTextAnnotation?.text || '';
+          const data = parseCardText(text);
+          setScannedData(data);
+          setShowTagSelector(true);
+          return;
+        }
+      }
+
+      throw new Error('OCR service unavailable');
     } catch (err: any) {
-      Alert.alert('OCR Error', err?.message || 'Failed to process business card');
-      setImageUri(null);
+      // Last resort: let user fill manually
+      Alert.alert(
+        'Scan Failed',
+        'Could not read the business card. You can fill in the details manually.',
+        [{ text: 'OK', onPress: () => {
+          onScanComplete({ first_name: 'Scanned' }, []);
+          onClose();
+        }}]
+      );
     }
     setProcessing(false);
+  }
+
+  function parseCardText(text: string): ScannedCardData {
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const data: ScannedCardData = {};
+
+    for (const line of lines) {
+      // Email detection
+      if (/[\w.-]+@[\w.-]+\.\w+/.test(line)) {
+        data.email = line;
+      }
+      // Phone detection
+      else if (/\+?\d[\d\s\-().]{7,}\d/.test(line)) {
+        data.phone = line;
+      }
+      // URL detection
+      else if (/^(https?:\/\/)?[\w.-]+\.\w{2,}(\/\S*)?$/.test(line)) {
+        data.website = line;
+      }
+    }
+
+    // First line is likely the name
+    if (lines.length > 0 && !data.email && !data.website) {
+      const nameParts = lines[0].split(' ');
+      if (nameParts.length >= 2) {
+        data.first_name = nameParts[0];
+        data.last_name = nameParts.slice(1).join(' ');
+      } else {
+        data.first_name = lines[0];
+      }
+    }
+
+    // Company is often the second line
+    if (lines.length > 1 && !lines[1].includes('@') && !lines[1].includes('.com') && !lines[1].match(/\d/)) {
+      data.business_name = lines[1];
+    }
+
+    // Look for title (often after company)
+    for (let i = 2; i < Math.min(lines.length, 5); i++) {
+      const keywords = ['manager', 'director', 'president', 'ceo', 'cto', 'founder', 'engineer', 'developer', 'lead', 'head of', 'vp', 'vice president', 'owner'];
+      if (keywords.some(k => lines[i].toLowerCase().includes(k))) {
+        data.title = lines[i];
+        break;
+      }
+    }
+
+    return data;
   }
 
   const toggleTag = (tag: Tag) => {
