@@ -154,6 +154,14 @@ export function deleteLead(id: string) {
   });
 }
 
+// OCR — parse business card image (base64)
+export function ocrParseCard(imageBase64: string) {
+  return request<any>('/ocr/parse-card', {
+    method: 'POST',
+    body: JSON.stringify({ image: imageBase64 }),
+  });
+}
+
 // Dashboard
 export function getDashboardStats() {
   return request<any>('/dashboard/stats');

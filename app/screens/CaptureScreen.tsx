@@ -19,6 +19,7 @@ import * as http from '../../lib/http';
 import BusinessCardScanner, { ScannedCardData } from '../components/BusinessCardScanner';
 import QRCodeScanner, { QRScannedData } from '../components/QRCodeScanner';
 import BulkImportScreen from '../components/BulkImportScreen';
+import PhotoGalleryBatch from '../components/PhotoGalleryBatch';
 import TagSelector from '../components/TagSelector';
 import NFCEventCapture from '../components/NFCEventCapture';
 
@@ -61,6 +62,7 @@ export default function CaptureScreen() {
   const [showScanner, setShowScanner] = useState(false);
   const [showQR, setShowQR] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
+  const [showPhotoBatch, setShowPhotoBatch] = useState(false);
   const [showTagSelector, setShowTagSelector] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [showNFC, setShowNFC] = useState(false);
@@ -259,6 +261,13 @@ export default function CaptureScreen() {
               <Text style={styles.scanButtonText}>Scan Card</Text>
             </TouchableOpacity>
             <TouchableOpacity
+              style={[styles.scanButton, { backgroundColor: '#EF4444', marginLeft: 8 }]}
+              onPress={() => setShowPhotoBatch(true)}
+            >
+              <Ionicons name="images" size={18} color="#fff" />
+              <Text style={styles.scanButtonText}>Batch</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={[styles.scanButton, { backgroundColor: '#10B981', marginLeft: 8 }]}
               onPress={() => setShowQR(true)}
             >
@@ -443,6 +452,12 @@ export default function CaptureScreen() {
           onComplete={(count: number) => {
             if (count > 0) setShowBulkImport(false);
           }}
+        />
+      )}
+
+      {showPhotoBatch && (
+        <PhotoGalleryBatch
+          onClose={() => setShowPhotoBatch(false)}
         />
       )}
 
