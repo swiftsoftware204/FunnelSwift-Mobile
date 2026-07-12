@@ -246,7 +246,7 @@ export default function CaptureScreen() {
       <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.text }]}>Capture Lead</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.headerActions} nestedScrollEnabled>
+<ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.headerActions} nestedScrollEnabled pointerEvents="box-none">
             <TouchableOpacity
               style={[styles.scanButton, { backgroundColor: colors.primary }]}
               onPress={() => setShowScanner(true)}
