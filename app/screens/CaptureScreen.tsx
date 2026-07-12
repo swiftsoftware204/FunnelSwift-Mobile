@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Modal,
 } from 'react-native';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
@@ -185,10 +186,9 @@ export default function CaptureScreen() {
     // Build API payload — only send what was filled
     const payload: Record<string, any> = {};
 
-    // Map to backend field names
-    if (fieldValues.first_name || fieldValues.last_name) {
-      payload.name = `${fieldValues.first_name || ''} ${fieldValues.last_name || ''}`.trim();
-    }
+    // Map to backend field names — send first/last separately
+    if (fieldValues.first_name) payload.first_name = fieldValues.first_name;
+    if (fieldValues.last_name) payload.last_name = fieldValues.last_name;
     if (fieldValues.email) payload.email = fieldValues.email;
     if (fieldValues.phone) payload.phone = fieldValues.phone;
     if (fieldValues.company) payload.company = fieldValues.company;
@@ -233,15 +233,7 @@ export default function CaptureScreen() {
     }
   }
 
-  if (showScanner) {
-    return (
-      <BusinessCardScanner
-        onScanComplete={handleScanComplete}
-        onClose={() => setShowScanner(false)}
-        availableTags={availableTags}
-      />
-    );
-  }
+  // Scanner is shown as a Modal below
 
   // Fields not yet added
   const availableToAdd = ADDABLE_FIELDS.filter(f => !activeFields.includes(f.key));
@@ -254,7 +246,7 @@ export default function CaptureScreen() {
       <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.text }]}>Capture Lead</Text>
-          <View style={styles.headerActions}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.headerActions}>
             <TouchableOpacity
               style={[styles.scanButton, { backgroundColor: colors.primary }]}
               onPress={() => setShowScanner(true)}
@@ -297,7 +289,7 @@ export default function CaptureScreen() {
               <Ionicons name="wifi" size={18} color="#fff" />
               <Text style={styles.scanButtonText}>NFC Event</Text>
             </TouchableOpacity>
-          </View>
+          </ScrollView>
         </View>
 
         <View style={[styles.card, { backgroundColor: colors.surface }]}>
@@ -448,29 +440,29 @@ export default function CaptureScreen() {
         availableTags={availableTags}
       />
 
-      {showQR && (
+      <Modal visible={showQR} animationType="slide" onRequestClose={() => setShowQR(false)}>
         <QRCodeScanner
           onScanComplete={handleQRScanComplete}
           onClose={() => setShowQR(false)}
         />
-      )}
+      </Modal>
 
-      {showBulkImport && (
+      <Modal visible={showBulkImport} animationType="slide" onRequestClose={() => setShowBulkImport(false)}>
         <BulkImportScreen
           onClose={() => setShowBulkImport(false)}
           onComplete={(count: number) => {
             if (count > 0) setShowBulkImport(false);
           }}
         />
-      )}
+      </Modal>
 
-      {showPhotoBatch && (
+      <Modal visible={showPhotoBatch} animationType="slide" onRequestClose={() => setShowPhotoBatch(false)}>
         <PhotoGalleryBatch
           onClose={() => setShowPhotoBatch(false)}
         />
-      )}
+      </Modal>
 
-      {showLinkedIn && (
+      <Modal visible={showLinkedIn} animationType="slide" onRequestClose={() => setShowLinkedIn(false)}>
         <LinkedInGrab
           onClose={() => setShowLinkedIn(false)}
           onComplete={(data) => {
@@ -487,9 +479,9 @@ export default function CaptureScreen() {
             Alert.alert('Profile Grabbed', 'LinkedIn data loaded. Review and save.');
           }}
         />
-      )}
+      </Modal>
 
-      {showNFC && (
+      <Modal visible={showNFC} animationType="slide" onRequestClose={() => setShowNFC(false)}>
         <NFCEventCapture
           eventName="Networking Event"
           availableTags={availableTags}
@@ -498,7 +490,14 @@ export default function CaptureScreen() {
           }}
           onClose={() => setShowNFC(false)}
         />
-      )}
+      </Modal>
+      <Modal visible={showScanner} animationType="slide" onRequestClose={() => setShowScanner(false)}>
+        <BusinessCardScanner
+          onScanComplete={handleScanComplete}
+          onClose={() => setShowScanner(false)}
+          availableTags={availableTags}
+        />
+      </Modal>
     </KeyboardAvoidingView>
   );
 }

@@ -91,6 +91,7 @@ export default function LeadDetailScreen({ route, navigation }: any) {
 
   async function fetchFreshLead() {
     try {
+      if (!lead.id) return;
       const fresh = await http.getLead(lead.id);
       if (fresh) {
         setLead(fresh);
@@ -107,7 +108,9 @@ export default function LeadDetailScreen({ route, navigation }: any) {
           notes: fresh.notes || '',
         });
       }
-    } catch {}
+    } catch (e) {
+      // silent — keep local state
+    }
   }
 
   function handleToggleTag(tagName: string) {
