@@ -16,8 +16,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.ggc.funnelswift",
-      "buildNumber": "1.0.0"
+      "bundleIdentifier": "com.ggc.funnelswift"
     },
     "android": {
       "adaptiveIcon": {
@@ -25,7 +24,6 @@
         "backgroundColor": "#0f1117"
       },
       "package": "com.ggc.funnelswift",
-      "versionCode": 1,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
