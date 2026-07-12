@@ -246,7 +246,7 @@ export default function CaptureScreen() {
       <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.text }]}>Capture Lead</Text>
-<ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.headerActions} nestedScrollEnabled pointerEvents="box-none">
+<View style={styles.headerActions}>
             <TouchableOpacity
               style={[styles.scanButton, { backgroundColor: colors.primary }]}
               onPress={() => setShowScanner(true)}
@@ -255,41 +255,41 @@ export default function CaptureScreen() {
               <Text style={styles.scanButtonText}>Scan Card</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.scanButton, { backgroundColor: '#0A66C2', marginLeft: 8 }]}
+              style={[styles.scanButton, { backgroundColor: '#0A66C2'}]}
               onPress={() => setShowLinkedIn(true)}
             >
               <Ionicons name="logo-linkedin" size={16} color="#fff" />
               <Text style={styles.scanButtonText}>LinkedIn</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.scanButton, { backgroundColor: '#EF4444', marginLeft: 8 }]}
+              style={[styles.scanButton, { backgroundColor: '#EF4444'}]}
               onPress={() => setShowPhotoBatch(true)}
             >
               <Ionicons name="images" size={18} color="#fff" />
               <Text style={styles.scanButtonText}>Batch</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.scanButton, { backgroundColor: '#10B981', marginLeft: 8 }]}
+              style={[styles.scanButton, { backgroundColor: '#10B981'}]}
               onPress={() => setShowQR(true)}
             >
               <Ionicons name="qr-code" size={18} color="#fff" />
               <Text style={styles.scanButtonText}>Scan QR</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.scanButton, { backgroundColor: '#8B5CF6', marginLeft: 8 }]}
+              style={[styles.scanButton, { backgroundColor: '#8B5CF6'}]}
               onPress={() => setShowBulkImport(true)}
             >
               <Ionicons name="cloud-upload" size={18} color="#fff" />
               <Text style={styles.scanButtonText}>Bulk</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.scanButton, { backgroundColor: '#F59E0B', marginLeft: 8 }]}
+              style={[styles.scanButton, { backgroundColor: '#F59E0B'}]}
               onPress={() => setShowNFC(true)}
             >
               <Ionicons name="wifi" size={18} color="#fff" />
               <Text style={styles.scanButtonText}>NFC Event</Text>
             </TouchableOpacity>
-          </ScrollView>
+          </View>
         </View>
 
         <View style={[styles.card, { backgroundColor: colors.surface }]}>
@@ -362,7 +362,7 @@ export default function CaptureScreen() {
                     ]}>{src}</Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </View>
             </View>
           )}
 
@@ -507,7 +507,7 @@ const styles = StyleSheet.create({
   scrollView: { padding: 16 },
   header: { marginBottom: 16 },
   title: { fontSize: 26, fontWeight: 'bold', marginBottom: 12 },
-  headerActions: { flexDirection: 'row' },
+  headerActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
   scanButton: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 14, paddingVertical: 8,
