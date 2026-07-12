@@ -362,7 +362,7 @@ export default function CaptureScreen() {
                     ]}>{src}</Text>
                   </TouchableOpacity>
                 ))}
-              </View>
+          </ScrollView>
             </View>
           )}
 
