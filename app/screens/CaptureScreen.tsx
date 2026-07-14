@@ -294,44 +294,51 @@ export default function CaptureScreen() {
 
         <View style={[styles.card, { backgroundColor: colors.surface }]}>
           {/* Always show Email */}
-          <View style={styles.fieldRow}>
-            <TextInput
-              style={[styles.input, {
-                backgroundColor: colors.surfaceLight,
-                borderColor: colors.border,
-                color: colors.text,
-              }]}
-              placeholder="Email *"
-              placeholderTextColor={colors.textMuted}
-              value={fieldValues.email || ''}
-              onChangeText={v => setValue('email', v)}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
+          <View style={styles.fieldContainer}>
+            <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>Email *</Text>
+            <View style={styles.fieldRow}>
+              <TextInput
+                style={[styles.input, {
+                  backgroundColor: colors.surfaceLight,
+                  borderColor: colors.border,
+                  color: colors.text,
+                }]}
+                placeholder="Email Address"
+                placeholderTextColor={colors.textMuted}
+                value={fieldValues.email || ''}
+                onChangeText={v => setValue('email', v)}
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
+            </View>
           </View>
 
           {/* Dynamic fields */}
           {activeFields.filter(f => f !== 'email' && f !== 'tags' && f !== 'lead_source').map(key => {
             const def = FIELD_DEFAULTS[key];
             if (!def) return null;
+            const fieldLabel = ADDABLE_FIELDS.find(f => f.key === key)?.label || def.placeholder;
             return (
-              <View key={key} style={styles.fieldRow}>
-                <TextInput
-                  style={[styles.input, styles.fieldWithRemove, {
-                    backgroundColor: colors.surfaceLight,
-                    borderColor: colors.border,
-                    color: colors.text,
-                  }]}
-                  placeholder={def.placeholder}
-                  placeholderTextColor={colors.textMuted}
-                  value={fieldValues[key] || ''}
-                  onChangeText={v => setValue(key, v)}
-                  keyboardType={def.keyboard as any}
-                  autoCapitalize="none"
-                />
-                <TouchableOpacity onPress={() => removeField(key)} style={styles.removeBtn}>
-                  <Ionicons name="close-circle" size={20} color={colors.error} />
-                </TouchableOpacity>
+              <View key={key} style={styles.fieldContainer}>
+                <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{fieldLabel}</Text>
+                <View style={styles.fieldRow}>
+                  <TextInput
+                    style={[styles.input, styles.fieldWithRemove, {
+                      backgroundColor: colors.surfaceLight,
+                      borderColor: colors.border,
+                      color: colors.text,
+                    }]}
+                    placeholder={def.placeholder}
+                    placeholderTextColor={colors.textMuted}
+                    value={fieldValues[key] || ''}
+                    onChangeText={v => setValue(key, v)}
+                    keyboardType={def.keyboard as any}
+                    autoCapitalize="none"
+                  />
+                  <TouchableOpacity onPress={() => removeField(key)} style={styles.removeBtn}>
+                    <Ionicons name="close-circle" size={20} color={colors.error} />
+                  </TouchableOpacity>
+                </View>
               </View>
             );
           })}
@@ -515,9 +522,9 @@ const styles = StyleSheet.create({
   },
   scanButtonText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   card: { borderRadius: 12, padding: 16, marginBottom: 16 },
+  fieldContainer: { marginBottom: 10 },
   fieldRow: {
     flexDirection: 'row', alignItems: 'center',
-    marginBottom: 8,
   },
   fieldWithRemove: { flex: 1, marginBottom: 0 },
   removeBtn: { marginLeft: 8, padding: 4 },

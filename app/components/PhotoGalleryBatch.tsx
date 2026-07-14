@@ -13,6 +13,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../lib/ThemeContext';
 import * as http from '../../lib/http';
+import * as ExpoFileSystem from 'expo-file-system';
 
 interface BatchItem {
   uri: string;
@@ -67,38 +68,43 @@ export default function PhotoGalleryBatch({ onClose }: Props) {
       });
 
       try {
-        // Convert image to base64
-        const response = await fetch(item.uri);
-        const blob = await response.blob();
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const data = reader.result as string;
-            resolve(data.split(',')[1]);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
+        // Compress image to 1200px and encode as base64
+        const base64 = await http.compressAndEncode(item.uri);
 
         // Send to backend OCR endpoint
         const ocrResult = await http.ocrParseCard(base64);
 
         // Create lead from parsed data
+        // Backend returns: { name, email, phone, company, title, raw_text }
         const leadData: Record<string, any> = {};
-        if (ocrResult.first_name) leadData.first_name = ocrResult.first_name;
-        if (ocrResult.last_name) leadData.last_name = ocrResult.last_name;
-        if (ocrResult.email) leadData.email = ocrResult.email;
-        if (ocrResult.phone) leadData.phone = ocrResult.phone;
-        if (ocrResult.business_name) leadData.company = ocrResult.business_name;
-        if (ocrResult.website) leadData.website = ocrResult.website;
-        if (ocrResult.title) leadData.title = ocrResult.title;
-        if (ocrResult.address) leadData.address = ocrResult.address;
+        if (ocrResult.name) {
+          const nameParts = ocrResult.name.split(' ');
+          leadData.first_name = (nameParts[0] || '').slice(0, 255);
+          leadData.last_name = (nameParts.slice(1).join(' ') || '').slice(0, 255);
+        }
+        if (ocrResult.email) leadData.email = ocrResult.email.slice(0, 255);
+        if (ocrResult.phone) leadData.phone = ocrResult.phone.slice(0, 50);
+        if (ocrResult.company) leadData.company = ocrResult.company.slice(0, 255);
+        if (ocrResult.title) leadData.title = ocrResult.title.slice(0, 255);
         leadData.source = 'Photo Gallery Batch';
         leadData.tags = ['Imported'];
 
         // Only create if we got at least a name or email
         if (leadData.first_name || leadData.email) {
-          await http.createLead(leadData);
+          try {
+            await http.createLead(leadData);
+          } catch (err: any) {
+            // If duplicate email, mark as done but warn
+            if (err.message?.includes('already exists')) {
+              setImages(prev => {
+                const updated = [...prev];
+                updated[i] = { ...updated[i], status: 'done', result: leadData, duplicate: true };
+                return updated;
+              });
+              continue;
+            }
+            throw err;
+          }
           setImages(prev => {
             const updated = [...prev];
             updated[i] = { ...updated[i], status: 'done', result: leadData };

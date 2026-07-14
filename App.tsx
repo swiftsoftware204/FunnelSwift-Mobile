@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider } from './lib/AuthContext';
 import { ThemeProvider } from './lib/ThemeContext';
 
@@ -59,35 +60,37 @@ function MainTabs() {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <NavigationContainer>
-          <StatusBar style="light" />
-          <Stack.Navigator
-            screenOptions={{
-              headerStyle: { backgroundColor: '#0f1117' },
-              headerTintColor: '#F1F5F9',
-              cardStyle: { backgroundColor: '#0f1117' },
-            }}
-          >
-            <Stack.Screen 
-              name="Login" 
-              component={LoginScreen} 
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen 
-              name="Main" 
-              component={MainTabs} 
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen 
-              name="LeadDetail" 
-              component={LeadDetailScreen}
-              options={{ title: 'Lead Details' }}
-            />
-          </Stack.Navigator>
-        </NavigationContainer>
-      </AuthProvider>
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
+        <AuthProvider>
+          <NavigationContainer>
+            <StatusBar style="light" />
+            <Stack.Navigator
+              screenOptions={{
+                headerStyle: { backgroundColor: '#0f1117' },
+                headerTintColor: '#F1F5F9',
+                cardStyle: { backgroundColor: '#0f1117' },
+              }}
+            >
+              <Stack.Screen 
+                name="Login" 
+                component={LoginScreen} 
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen 
+                name="Main" 
+                component={MainTabs} 
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen 
+                name="LeadDetail" 
+                component={LeadDetailScreen}
+                options={{ title: 'Lead Details' }}
+              />
+            </Stack.Navigator>
+          </NavigationContainer>
+        </AuthProvider>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }

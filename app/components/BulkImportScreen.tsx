@@ -2,15 +2,17 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
+  TextInput,
   StyleSheet,
   TouchableOpacity,
   FlatList,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
-import * as Contacts from 'expo-contacts';
+import * as Contacts from 'expo-contacts/legacy';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../lib/ThemeContext';
 import * as http from '../../lib/http';
@@ -35,9 +37,14 @@ export default function BulkImportScreen({ onClose, onComplete }: Props) {
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [imported, setImported] = useState(0);
+  const [showContactPicker, setShowContactPicker] = useState(false);
+  const [contactSelection, setContactSelection] = useState<any[]>([]);
+  const [showGroupPicker, setShowGroupPicker] = useState(false);
+  const [contactGroups, setContactGroups] = useState<{id: string; name: string}[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const { colors } = useTheme();
 
-  async function importFromContacts() {
+  async function importFromGroups() {
     setLoading(true);
     try {
       const { status } = await Contacts.requestPermissionsAsync();
@@ -47,6 +54,77 @@ export default function BulkImportScreen({ onClose, onComplete }: Props) {
         return;
       }
 
+      // iOS supports contact groups; Android does not — skip group picker
+      if (Platform.OS === 'ios') {
+        try {
+          const groups = await Contacts.getGroupsAsync({});
+          if (groups && groups.length > 0) {
+            setContactGroups([
+              { id: '__all__', name: 'All Contacts' },
+              ...groups.map((g: any) => ({ id: g.id, name: g.name || 'Unnamed Group' })),
+            ]);
+            setShowGroupPicker(true);
+            return;
+          }
+        } catch {
+          // getGroupsAsync failed — fall through to load all
+        }
+      }
+
+      // Android or no groups: load all contacts directly
+      await loadAllContacts();
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to read contacts.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadFromGroup(groupId: string, groupName?: string) {
+    setShowGroupPicker(false);
+    setLoading(true);
+    try {
+      const { data } = await Contacts.getContactsAsync({
+        fields: [
+          Contacts.Fields.Name,
+          Contacts.Fields.Emails,
+          Contacts.Fields.PhoneNumbers,
+          Contacts.Fields.Company,
+        ],
+        ...(groupId !== '__all__' ? { groupId } : {}),
+      });
+
+      const allContacts = data
+        .filter((c: any) => c.name && (c.emails?.length || c.phoneNumbers?.length))
+        .map(c => ({
+          name: c.name || '',
+          email: c.emails?.[0]?.email || '',
+          phone: c.phoneNumbers?.[0]?.number || '',
+          company: c.company || '',
+          tags: ['Imported'],
+          status: 'pending' as const,
+          _selected: false,
+        }));
+
+      if (allContacts.length === 0) {
+        Alert.alert('No Contacts', groupName
+          ? `No contacts with email or phone found in "${groupName}".`
+          : 'No contacts with email or phone found.');
+        return;
+      }
+
+      setContactSelection(allContacts);
+      setShowContactPicker(true);
+    } catch (err: any) {
+      // Fallback: load all contacts
+      await loadAllContacts();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadAllContacts() {
+    try {
       const { data } = await Contacts.getContactsAsync({
         fields: [
           Contacts.Fields.Name,
@@ -56,7 +134,7 @@ export default function BulkImportScreen({ onClose, onComplete }: Props) {
         ],
       });
 
-      const parsed: ImportLead[] = data
+      const allContacts = data
         .filter((c: any) => c.name && (c.emails?.length || c.phoneNumbers?.length))
         .map(c => ({
           name: c.name || '',
@@ -65,18 +143,35 @@ export default function BulkImportScreen({ onClose, onComplete }: Props) {
           company: c.company || '',
           tags: ['Imported'],
           status: 'pending' as const,
+          _selected: false,
         }));
 
-      if (parsed.length === 0) {
+      if (allContacts.length === 0) {
         Alert.alert('No Contacts', 'No contacts with email or phone found on this device.');
-      } else {
-        setLeads(parsed);
+        return;
       }
+
+      setContactSelection(allContacts);
+      setShowContactPicker(true);
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to read contacts');
-    } finally {
-      setLoading(false);
     }
+  }
+
+  async function searchContacts(searchText: string) {
+    setSearchQuery(searchText);
+    if (!searchText.trim()) {
+      // Reset to full list
+      setContactSelection(prev => prev.map(c => ({ ...c, _visible: true })));
+      return;
+    }
+    const q = searchText.toLowerCase();
+    setContactSelection(prev => prev.map(c => ({
+      ...c,
+      _visible: c.name.toLowerCase().includes(q) ||
+                c.email.toLowerCase().includes(q) ||
+                c.phone.toLowerCase().includes(q),
+    })));
   }
 
   async function importFromCSV() {
@@ -93,7 +188,8 @@ export default function BulkImportScreen({ onClose, onComplete }: Props) {
       }
 
       const fileUri = result.assets[0].uri;
-      const content = await FileSystem.readAsStringAsync(fileUri);
+      const response = await fetch(fileUri);
+      const content = await response.text();
       const lines = content.split('\n').filter(l => l.trim());
 
       if (lines.length < 2) {
@@ -202,6 +298,133 @@ export default function BulkImportScreen({ onClose, onComplete }: Props) {
         <View style={{ width: 28 }} />
       </View>
 
+      {/* Group Picker */}
+      {showGroupPicker && (
+        <View style={styles.contactPickerOverlay}>
+          <View style={[styles.contactPickerContainer, { backgroundColor: colors.surface }]}>
+            <View style={styles.contactPickerHeader}>
+              <Text style={[styles.contactPickerTitle, { color: colors.text }]}>Select Contact Group</Text>
+              <TouchableOpacity onPress={() => setShowGroupPicker(false)}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={contactGroups}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[styles.contactRow, { borderBottomColor: colors.border }]}
+                  onPress={() => loadFromGroup(item.id, item.name)}
+                >
+                  <View style={[styles.groupIconBox, { backgroundColor: item.id === '__all__' ? colors.primary : colors.warning }]}>
+                    <Ionicons
+                      name={item.id === '__all__' ? 'people' : 'folder'}
+                      size={20}
+                      color="#fff"
+                    />
+                  </View>
+                  <View style={styles.contactRowInfo}>
+                    <Text style={[styles.contactRowName, { color: colors.text }]}>{item.name}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                </TouchableOpacity>
+              )}
+              style={styles.contactPickerList}
+            />
+          </View>
+        </View>
+      )}
+
+      {/* Contact Picker Modal */}
+      {showContactPicker && (
+        <View style={styles.contactPickerOverlay}>
+          <View style={[styles.contactPickerContainer, { backgroundColor: colors.surface }]}>
+            <View style={styles.contactPickerHeader}>
+              <Text style={[styles.contactPickerTitle, { color: colors.text }]}>
+                Select Contacts ({contactSelection.filter(c => c._selected).length} selected)
+              </Text>
+              <TouchableOpacity onPress={() => {
+                setShowContactPicker(false);
+                setSearchQuery('');
+              }}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.contactPickerActions}>
+              <TouchableOpacity onPress={() => {
+                setContactSelection(prev => prev.map(c => ({ ...c, _selected: true })));
+              }}>
+                <Text style={[styles.contactPickerAction, { color: colors.primary }]}>Select All</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => {
+                setContactSelection(prev => prev.map(c => ({ ...c, _selected: false })));
+              }}>
+                <Text style={[styles.contactPickerAction, { color: colors.textMuted }]}>Clear</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => {
+                const selected = contactSelection.filter(c => c._selected);
+                if (selected.length === 0) {
+                  Alert.alert('No Selection', 'Select at least one contact to import.');
+                  return;
+                }
+                setLeads(selected.map(({ _selected, ...rest }) => ({ ...rest, status: 'pending' as const })));
+                setShowContactPicker(false);
+              }}>
+                <Text style={[styles.contactPickerAction, { color: colors.success, fontWeight: '700' }]}>
+                  Import ({contactSelection.filter(c => c._selected).length})
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <TextInput
+            style={[styles.searchInput, {
+              backgroundColor: colors.surfaceLight,
+              borderColor: colors.border,
+              color: colors.text,
+              marginHorizontal: 20,
+              marginBottom: 8,
+              height: 40,
+              borderRadius: 8,
+              paddingHorizontal: 14,
+              fontSize: 14,
+            }]}
+            placeholder="Search contacts..."
+            placeholderTextColor={colors.textMuted}
+            value={searchQuery}
+            onChangeText={searchContacts}
+          />
+          <FlatList
+              data={contactSelection.filter((c: any) => c._visible == null || c._visible !== false)}
+              keyExtractor={(_, i) => String(i)}
+              renderItem={({ item, index }) => (
+                <TouchableOpacity
+                  style={[styles.contactRow, { borderBottomColor: colors.border }]}
+                  onPress={() => {
+                    setContactSelection(prev => {
+                      const updated = [...prev];
+                      updated[index] = { ...updated[index], _selected: !updated[index]._selected };
+                      return updated;
+                    });
+                  }}
+                >
+                  <Ionicons
+                    name={item._selected ? 'checkbox' : 'square-outline'}
+                    size={22}
+                    color={item._selected ? colors.primary : colors.textMuted}
+                  />
+                  <View style={styles.contactRowInfo}>
+                    <Text style={[styles.contactRowName, { color: colors.text }]}>{item.name}</Text>
+                    <Text style={[styles.contactRowDetail, { color: colors.textMuted }]}>
+                      {item.email || item.phone || 'No contact info'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+              style={styles.contactPickerList}
+            />
+          </View>
+        </View>
+      )}
+
       {/* No leads loaded — show import sources */}
       {leads.length === 0 && (
         <View style={styles.sourceList}>
@@ -209,7 +432,7 @@ export default function BulkImportScreen({ onClose, onComplete }: Props) {
 
           <TouchableOpacity
             style={[styles.sourceCard, { backgroundColor: colors.surface }]}
-            onPress={importFromContacts}
+            onPress={importFromGroups}
             disabled={loading}
           >
             <View style={[styles.sourceIcon, { backgroundColor: colors.primary + '20' }]}>
@@ -327,6 +550,64 @@ export default function BulkImportScreen({ onClose, onComplete }: Props) {
 }
 
 const styles = StyleSheet.create({
+  // Contact Picker
+  contactPickerOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    zIndex: 100,
+  },
+  contactPickerContainer: {
+    flex: 1,
+    marginTop: 80,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 8,
+  },
+  contactPickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  contactPickerTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  contactPickerActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  contactPickerAction: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  searchInput: { height: 40, borderRadius: 8, paddingHorizontal: 12, fontSize: 14 },
+  contactPickerList: {
+    flex: 1,
+  },
+  groupIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    gap: 10,
+  },
+  contactRowInfo: { flex: 1 },
+  contactRowName: { fontSize: 15, fontWeight: '500' },
+  contactRowDetail: { fontSize: 12, marginTop: 2 },
   container: { flex: 1 },
   header: {
     flexDirection: 'row',

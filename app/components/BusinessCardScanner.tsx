@@ -13,6 +13,8 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../lib/ThemeContext';
+import * as SecureStore from 'expo-secure-store';
+import * as http from '../../lib/http';
 
 export interface ScannedCardData {
   business_name?: string;
@@ -62,13 +64,16 @@ export default function BusinessCardScanner({ onScanComplete, onClose, available
     if (!cameraRef.current) return;
     setScanning(true);
     try {
+      // Take photo with low quality to keep it fast — no in-memory base64
       const photo = await cameraRef.current.takePictureAsync({
-        base64: true,
-        quality: 0.8,
+        base64: false,
+        quality: 0.5,
       });
-      if (photo?.base64) {
+      if (photo?.uri) {
         setImageUri(photo.uri);
-        await processImage(photo.base64);
+        // Compress from URI instead of loading full-res base64 in memory
+        const compressedBase64 = await http.compressAndEncode(photo.uri);
+        await processImage(compressedBase64);
       }
     } catch (err) {
       Alert.alert('Error', 'Failed to capture image');
@@ -79,12 +84,13 @@ export default function BusinessCardScanner({ onScanComplete, onClose, available
   async function pickFromGallery() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
-      base64: true,
+      quality: 0.5,
+      base64: false,
     });
-    if (!result.canceled && result.assets[0]?.base64) {
+    if (!result.canceled && result.assets[0]?.uri) {
       setImageUri(result.assets[0].uri);
-      await processImage(result.assets[0].base64);
+      const compressedBase64 = await http.compressAndEncode(result.assets[0].uri);
+      await processImage(compressedBase64);
     }
   }
 
@@ -92,51 +98,35 @@ export default function BusinessCardScanner({ onScanComplete, onClose, available
     setProcessing(true);
     try {
       // Try backend OCR first
-      const response = await fetch('https://funnelswift.com/api/ocr/parse-card', {
+      const token = await SecureStore.getItemAsync('funnelswift_auth_token');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      // 30s timeout to prevent hanging on slow upload
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+
+      const response = await fetch('https://funnelswift.net/api/v1/ocr/parse-card', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: base64 }),
+        headers,
+        body: JSON.stringify({ image_base64: base64 }),
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
 
       if (response.ok) {
         const result = await response.json();
-        if (result.success && result.extracted) {
+        // Backend returns: { name, email, phone, company, title, raw_text }
+        if (result && (result.name || result.email || result.phone || result.company)) {
+          const nameParts = (result.name || '').split(' ');
           const data: ScannedCardData = {
-            business_name: result.extracted.businessName || '',
-            first_name: result.extracted.firstName || '',
-            last_name: result.extracted.lastName || '',
-            email: result.extracted.email || '',
-            phone: result.extracted.phone || '',
-            website: result.extracted.website || '',
-            title: result.extracted.title || '',
+            business_name: result.company || '',
+            first_name: nameParts[0] || '',
+            last_name: nameParts.slice(1).join(' ') || '',
+            email: result.email || '',
+            phone: result.phone || '',
+            title: result.title || '',
           };
-          setScannedData(data);
-          setShowTagSelector(true);
-          return;
-        }
-      }
-
-      // Fallback: use Google Cloud Vision API directly
-      const visionKey = ''; // Set via environment or config
-      if (visionKey) {
-        const visionResponse = await fetch(
-          `https://vision.googleapis.com/v1/images:annotate?key=${visionKey}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              requests: [{
-                image: { content: base64 },
-                features: [{ type: 'DOCUMENT_TEXT_DETECTION', maxResults: 1 }],
-              }],
-            }),
-          }
-        );
-
-        if (visionResponse.ok) {
-          const visionData = await visionResponse.json();
-          const text = visionData.responses?.[0]?.fullTextAnnotation?.text || '';
-          const data = parseCardText(text);
           setScannedData(data);
           setShowTagSelector(true);
           return;
@@ -145,17 +135,20 @@ export default function BusinessCardScanner({ onScanComplete, onClose, available
 
       throw new Error('OCR service unavailable');
     } catch (err: any) {
-      // Last resort: let user fill manually
+      // Let user fill manually
       Alert.alert(
         'Scan Failed',
-        'Could not read the business card. You can fill in the details manually.',
+        err.name === 'AbortError'
+          ? 'The scan took too long. Try again with better lighting or a clearer card.'
+          : 'Could not read the business card. You can fill in the details manually.',
         [{ text: 'OK', onPress: () => {
           onScanComplete({ first_name: 'Scanned' }, []);
           onClose();
         }}]
       );
+    } finally {
+      setProcessing(false);
     }
-    setProcessing(false);
   }
 
   function parseCardText(text: string): ScannedCardData {

@@ -1,12 +1,24 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Alert,
+  Modal,
+} from 'react-native';
+import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../lib/AuthContext';
 import { useTheme } from '../../lib/ThemeContext';
+import AccountSettingsModal from '../components/AccountSettingsModal';
+import NotificationsModal from '../components/NotificationsModal';
 
 export default function ProfileScreen({ navigation }: any) {
   const { user, isSuperAdmin, signOut } = useAuth();
   const { colors } = useTheme();
+  const [showAccountSettings, setShowAccountSettings] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   async function handleSignOut() {
     Alert.alert(
@@ -14,8 +26,8 @@ export default function ProfileScreen({ navigation }: any) {
       'Are you sure you want to sign out?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Sign Out', 
+        {
+          text: 'Sign Out',
           style: 'destructive',
           onPress: async () => {
             await signOut();
@@ -30,22 +42,32 @@ export default function ProfileScreen({ navigation }: any) {
     {
       icon: 'person' as const,
       title: 'Account Settings',
-      onPress: () => {},
+      onPress: () => setShowAccountSettings(true),
     },
     {
       icon: 'notifications' as const,
       title: 'Notifications',
-      onPress: () => {},
+      onPress: () => setShowNotifications(true),
     },
     {
       icon: 'shield-checkmark' as const,
       title: 'Privacy & Security',
-      onPress: () => {},
+      onPress: () => {
+        Alert.alert(
+          'Privacy & Security',
+          'Session tokens are stored securely on-device. All data is encrypted in transit. Contact support for account deletion or data export requests.'
+        );
+      },
     },
     {
       icon: 'help-circle' as const,
       title: 'Help & Support',
-      onPress: () => {},
+      onPress: () => {
+        Alert.alert(
+          'Help & Support',
+          'For support inquiries, please email:\nsupport@funnelswift.net\n\nDocumentation:\nhttps://funnelswift.net/docs'
+        );
+      },
     },
   ];
 
@@ -57,7 +79,10 @@ export default function ProfileScreen({ navigation }: any) {
             {user?.email?.charAt(0).toUpperCase() || 'U'}
           </Text>
         </View>
-        <Text style={[styles.email, { color: colors.text }]}>{user?.email}</Text>
+        <Text style={[styles.name, { color: colors.text }]}>
+          {user?.name || user?.email || 'User'}
+        </Text>
+        <Text style={[styles.email, { color: colors.textMuted }]}>{user?.email}</Text>
         {isSuperAdmin && (
           <View style={[styles.badge, { backgroundColor: colors.primary + '20' }]}>
             <Text style={[styles.badgeText, { color: colors.primary }]}>Super Admin</Text>
@@ -88,21 +113,24 @@ export default function ProfileScreen({ navigation }: any) {
       </TouchableOpacity>
 
       <Text style={[styles.version, { color: colors.textMuted }]}>
-        FunnelSwift Mobile v1.0.0
+        FunnelSwift Mobile v1.0.5
       </Text>
+
+      {/* Modals */}
+      <Modal visible={showAccountSettings} animationType="slide" onRequestClose={() => setShowAccountSettings(false)}>
+        <AccountSettingsModal onClose={() => setShowAccountSettings(false)} />
+      </Modal>
+
+      <Modal visible={showNotifications} animationType="slide" onRequestClose={() => setShowNotifications(false)}>
+        <NotificationsModal onClose={() => setShowNotifications(false)} />
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  profileHeader: {
-    alignItems: 'center',
-    padding: 24,
-    marginBottom: 16,
-  },
+  container: { flex: 1 },
+  profileHeader: { alignItems: 'center', padding: 24, marginBottom: 16 },
   avatar: {
     width: 80,
     height: 80,
@@ -111,27 +139,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  avatarText: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  email: {
-    fontSize: 16,
-    marginBottom: 8,
-  },
-  badge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  menuContainer: {
-    paddingHorizontal: 16,
-  },
+  avatarText: { fontSize: 32, fontWeight: 'bold', color: '#fff' },
+  name: { fontSize: 20, fontWeight: '700', marginBottom: 4 },
+  email: { fontSize: 14, marginBottom: 8 },
+  badge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
+  badgeText: { fontSize: 12, fontWeight: '600' },
+  menuContainer: { paddingHorizontal: 16 },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -139,11 +152,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
   },
-  menuText: {
-    flex: 1,
-    fontSize: 16,
-    marginLeft: 12,
-  },
+  menuText: { flex: 1, fontSize: 16, marginLeft: 12 },
   signOutButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -153,14 +162,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
   },
-  signOutText: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  version: {
-    textAlign: 'center',
-    marginTop: 24,
-    fontSize: 12,
-  },
+  signOutText: { fontSize: 16, fontWeight: '600', marginLeft: 8 },
+  version: { textAlign: 'center', marginTop: 24, fontSize: 12 },
 });

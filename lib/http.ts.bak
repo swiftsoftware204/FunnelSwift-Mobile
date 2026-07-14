@@ -263,32 +263,3 @@ export function updateSettings(data: Record<string, any>) {
 export function getActivityLog() {
   return request<any[]>('/dashboard/activity');
 }
-
-// ── Web-to-Lead Widgets ──
-export function getWebToLeadConfigs() {
-  return request<any[]>('/web-to-lead/configs');
-}
-
-export function createWebToLeadConfig(data: Record<string, any>) {
-  return request<{ id: string; message: string }>('/web-to-lead/configs', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-}
-
-export function updateWebToLeadConfig(id: string, data: Record<string, any>) {
-  return request<any>('/web-to-lead/configs/' + id, {
-    method: 'PUT',
-    body: JSON.stringify(data),
-  });
-}
-
-export function deleteWebToLeadConfig(id: string) {
-  return request<any>('/web-to-lead/configs/' + id, {
-    method: 'DELETE',
-  });
-}
-
-export function getWebToLeadEmbed(id: string) {
-  return request<any>('/web-to-lead/configs/' + id + '/embed');
-}

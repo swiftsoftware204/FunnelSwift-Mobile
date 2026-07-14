@@ -17,7 +17,17 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.ggc.funnelswift",
-      "buildNumber": "1.0.0"
+      "buildNumber": "1.0.0",
+      "infoPlist": {
+        "NSCameraUsageDescription": "FunnelSwift uses the camera to scan business cards and capture lead photos.",
+        "NSPhotoLibraryUsageDescription": "FunnelSwift accesses your photo library to attach images to leads.",
+        "NSContactsUsageDescription": "FunnelSwift accesses your contacts to import leads from your address book.",
+        "NSLocationWhenInUseUsageDescription": "FunnelSwift uses your location to tag where you captured leads.",
+        "NSFaceIDUsageDescription": "FunnelSwift uses Face ID to secure your account access.",
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -54,7 +64,10 @@
         {
           "photosPermission": "Allow FunnelSwift to access your photos to attach to leads."
         }
-      ]
+      ],
+      "expo-secure-store",
+      "expo-status-bar",
+      "react-native-nfc-manager"
     ],
     "extra": {
       "eas": {

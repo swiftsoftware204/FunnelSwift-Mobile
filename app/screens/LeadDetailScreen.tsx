@@ -39,6 +39,15 @@ const FIELD_CONFIG: Record<string, { label: string; icon: string; keyboard?: any
   notes: { label: 'Notes', icon: 'document-text' },
 };
 
+const ADDABLE_FIELDS: { key: string; label: string; icon: string }[] = [
+  { key: 'first_name', label: 'First Name', icon: 'person' },
+  { key: 'last_name', label: 'Last Name', icon: 'person' },
+  { key: 'website', label: 'Website', icon: 'globe' },
+  { key: 'address', label: 'Address', icon: 'location' },
+  { key: 'title', label: 'Title / Position', icon: 'briefcase' },
+  { key: 'social', label: 'Social (LinkedIn, etc.)', icon: 'link' },
+];
+
 export default function LeadDetailScreen({ route, navigation }: any) {
   const initialLead = route.params?.lead || {};
   const [lead, setLead] = useState<any>(initialLead);
@@ -48,8 +57,17 @@ export default function LeadDetailScreen({ route, navigation }: any) {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [availableTags, setAvailableTags] = useState<any[]>([]);
   const [editForm, setEditForm] = useState<Record<string, string>>({});
+  const [activeFields, setActiveFields] = useState<string[]>([]);
+
+  function addField(key: string) {
+    if (!activeFields.includes(key)) {
+      setActiveFields([...activeFields, key]);
+      setEditForm(f => ({ ...f, [key]: '' }));
+    }
+  }
 
   const { colors } = useTheme();
+
 
   useEffect(() => {
     fetchTagsAndPopulate();
@@ -133,6 +151,16 @@ export default function LeadDetailScreen({ route, navigation }: any) {
     if (editForm.source !== (lead.source || '')) payload.source = editForm.source;
     if (editForm.notes !== (lead.notes || '')) payload.notes = editForm.notes;
 
+    // Dynamic addable fields
+    const addableKeys = ['first_name', 'last_name', 'website', 'address', 'title', 'social'];
+    for (const key of addableKeys) {
+      if (editForm[key] !== undefined && editForm[key] !== '') {
+        if (editForm[key] !== (lead[key] || '')) {
+          payload[key] = editForm[key];
+        }
+      }
+    }
+
     // Tags
     const currentTags = lead.tags ? (Array.isArray(lead.tags) ? lead.tags : []) : [];
     const tagsChanged = JSON.stringify(currentTags.sort()) !== JSON.stringify([...selectedTags].sort());
@@ -212,7 +240,8 @@ export default function LeadDetailScreen({ route, navigation }: any) {
             if (key === 'notes') return null; // Notes below
             if (editing) {
               return (
-                <View key={key} style={styles.editRow}>
+                <View key={key} style={styles.editFieldContainer}>
+                  <Text style={[styles.editFieldLabel, { color: colors.textMuted }]}>{config.label}</Text>
                   <TextInput
                     style={[styles.editInput, {
                       backgroundColor: colors.surfaceLight,
@@ -300,6 +329,30 @@ export default function LeadDetailScreen({ route, navigation }: any) {
         )}
       </View>
 
+      {/* Add Field chips --- only in edit mode */}
+      {editing && (() => {
+        const usedKeys = Object.keys(editForm);
+        const available = ADDABLE_FIELDS.filter(f => !usedKeys.includes(f.key));
+        if (available.length === 0) return null;
+        return (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Add Field</Text>
+            <View style={[styles.card, { backgroundColor: colors.surface, flexDirection: "row", flexWrap: "wrap", gap: 6 }]}>
+              {available.map(field => (
+                <TouchableOpacity
+                  key={field.key}
+                  style={[styles.addFieldChip, { backgroundColor: colors.surfaceLight, borderColor: colors.border }]}
+                  onPress={() => addField(field.key)}
+                >
+                  <Ionicons name={field.icon} size={14} color={colors.primary} />
+                  <Text style={[styles.addFieldChipText, { color: colors.text }]}>{field.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        );
+      })()}
+
       {/* Dates */}
       <View style={[styles.card, { backgroundColor: colors.surface }]}>
         <View style={styles.infoRow}>
@@ -363,6 +416,34 @@ export default function LeadDetailScreen({ route, navigation }: any) {
             <Ionicons name="create" size={18} color="#fff" />
             <Text style={styles.actionBtnText}>Edit Lead</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.deleteTrigger]}
+            onPress={() => {
+              Alert.alert(
+                'Delete Lead',
+                `Are you sure you want to delete ${lead.name || 'this lead'}?`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        await http.deleteLead(lead.id);
+                        Alert.alert('Deleted', 'Lead has been deleted.');
+                        navigation.goBack();
+                      } catch (err: any) {
+                        Alert.alert('Error', err.message || 'Failed to delete lead.');
+                      }
+                    }
+                  },
+                ]
+              );
+            }}
+          >
+            <Ionicons name="trash" size={18} color="#EF4444" />
+            <Text style={[styles.actionBtnText, { color: '#EF4444' }]}>Delete Lead</Text>
+          </TouchableOpacity>
         </>
       )}
 
@@ -399,6 +480,8 @@ const styles = StyleSheet.create({
   infoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
   infoText: { fontSize: 14, marginLeft: 10, flex: 1 },
   notesText: { fontSize: 14, lineHeight: 22 },
+  editFieldContainer: { marginBottom: 10 },
+  editFieldLabel: { fontSize: 12, fontWeight: '600', marginBottom: 4, marginLeft: 2 },
   editRow: { marginBottom: 8 },
   editInput: { height: 44, borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, fontSize: 15, marginBottom: 8 },
   editNotes: { height: 120, paddingTop: 10 },
@@ -406,5 +489,6 @@ const styles = StyleSheet.create({
   editActions: { paddingHorizontal: 16, gap: 10, marginTop: 16, marginBottom: 32 },
   actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, gap: 6 },
   actionBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  editTrigger: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginHorizontal: 16, marginTop: 10, marginBottom: 32, padding: 12, borderRadius: 8, gap: 6 },
+  editTrigger: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginHorizontal: 16, marginTop: 10, padding: 12, borderRadius: 8, gap: 6 },
+  deleteTrigger: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginHorizontal: 16, marginTop: 8, marginBottom: 32, padding: 12, borderRadius: 8, gap: 6, borderWidth: 1, borderColor: '#EF4444' },
 });
