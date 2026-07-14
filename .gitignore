@@ -13,3 +13,5 @@ web-build/
 .env.*
 !.env.example
 android/
+public/app-release.apk
+public/app-release.apk
