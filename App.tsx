@@ -15,6 +15,7 @@ import CaptureScreen from './app/screens/CaptureScreen';
 import LeadsScreen from './app/screens/LeadsScreen';
 import ProfileScreen from './app/screens/ProfileScreen';
 import LeadDetailScreen from './app/screens/LeadDetailScreen';
+import KineticCardsScreen from './app/screens/KineticCardsScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -32,6 +33,8 @@ function MainTabs() {
             iconName = focused ? 'add-circle' : 'add-circle-outline';
           } else if (route.name === 'Leads') {
             iconName = focused ? 'people' : 'people-outline';
+          } else if (route.name === 'KineticCards') {
+            iconName = focused ? 'flash' : 'flash-outline';
           } else if (route.name === 'Profile') {
             iconName = focused ? 'person' : 'person-outline';
           }
@@ -52,6 +55,7 @@ function MainTabs() {
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Capture" component={CaptureScreen} />
+      <Tab.Screen name="KineticCards" component={KineticCardsScreen} options={{ title: 'Kinetic' }} />
       <Tab.Screen name="Leads" component={LeadsScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>

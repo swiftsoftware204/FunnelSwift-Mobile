@@ -395,20 +395,6 @@ export default function LeadDetailScreen({ route, navigation }: any) {
         </View>
       ) : (
         <>
-          <View style={styles.actions}>
-            {lead.phone && (
-              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.primary }]} onPress={() => Linking.openURL(`tel:${lead.phone}`)}>
-                <Ionicons name="call" size={18} color="#fff" />
-                <Text style={styles.actionBtnText}>Call</Text>
-              </TouchableOpacity>
-            )}
-            {lead.email && (
-              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.surface }]} onPress={() => Linking.openURL(`mailto:${lead.email}`)}>
-                <Ionicons name="mail" size={18} color={colors.text} />
-                <Text style={[styles.actionBtnText, { color: colors.text }]}>Email</Text>
-              </TouchableOpacity>
-            )}
-          </View>
           <TouchableOpacity
             style={[styles.editTrigger, { backgroundColor: colors.primary }]}
             onPress={() => setEditing(true)}

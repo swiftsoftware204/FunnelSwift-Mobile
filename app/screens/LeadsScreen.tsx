@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,10 @@ import {
   RefreshControl,
   ActivityIndicator,
   TextInput,
+  Alert,
+  Linking,
+  Animated,
+  PanResponder,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../lib/ThemeContext';
@@ -86,65 +90,147 @@ export default function LeadsScreen({ navigation }: any) {
     setRefreshing(false);
   }
 
-  function renderLead({ item }: { item: any }) {
-    const tags: string[] = item.tags ? (Array.isArray(item.tags) ? item.tags : []) : [];
-    const displayName = item.name || item.email || 'Unknown';
-    const stage = item.stage || item.status || 'New';
+  // ── Swipeable Lead Card ──
+  function SwipeableLeadCard({ lead }: { lead: any }) {
+    const translateX = useRef(new Animated.Value(0)).current;
+    const SWIPE_THRESHOLD = 80;
+    const ACTION_WIDTH = 72;
+
+    const panResponder = useRef(
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          Math.abs(gesture.dx) > 10 && Math.abs(gesture.dx) > Math.abs(gesture.dy),
+        onPanResponderMove: (_, gesture) => {
+          if (gesture.dx < 0) {
+            translateX.setValue(Math.max(gesture.dx, -ACTION_WIDTH * 3 - 12));
+          }
+        },
+        onPanResponderRelease: (_, gesture) => {
+          if (gesture.dx < -SWIPE_THRESHOLD) {
+            Animated.spring(translateX, {
+              toValue: -ACTION_WIDTH * 3 - 12,
+              useNativeDriver: true,
+              bounciness: 4,
+            }).start();
+          } else {
+            Animated.spring(translateX, {
+              toValue: 0,
+              useNativeDriver: true,
+              bounciness: 4,
+            }).start();
+          }
+        },
+      })
+    ).current;
+
+    function closeSwipe() {
+      Animated.spring(translateX, {
+        toValue: 0,
+        useNativeDriver: true,
+        bounciness: 4,
+      }).start();
+    }
+
+    const tags: string[] = lead.tags ? (Array.isArray(lead.tags) ? lead.tags : []) : [];
+    const displayName = lead.name || lead.email || 'Unknown';
+    const stage = lead.stage || lead.status || 'New';
 
     return (
-      <TouchableOpacity
-        style={[styles.leadCard, { backgroundColor: colors.surface }]}
-        onPress={() => navigation.navigate('LeadDetail', { lead: item })}
-      >
-        <View style={styles.leadHeader}>
-          <View style={styles.leadInfo}>
-            <Text style={[styles.leadName, { color: colors.text }]}>{displayName}</Text>
-            {item.company && (
-              <Text style={[styles.companyName, { color: colors.textMuted }]}>{item.company}</Text>
-            )}
-          </View>
-          <View style={[styles.stageBadge, { backgroundColor: getStageColor(stage) + '20' }]}>
-            <Text style={[styles.stageText, { color: getStageColor(stage) }]}>{stage}</Text>
-          </View>
+      <View style={styles.swipeContainer}>
+        {/* Action Buttons Behind Card */}
+        <View style={styles.swipeActions}>
+          {lead.phone && (
+            <TouchableOpacity
+              style={[styles.swipeAction, { backgroundColor: '#22C55E' }]}
+              onPress={() => { Linking.openURL(`sms:${lead.phone}`); closeSwipe(); }}
+            >
+              <Ionicons name="chatbubble" size={22} color="#fff" />
+              <Text style={styles.swipeActionText}>Text</Text>
+            </TouchableOpacity>
+          )}
+          {lead.email && (
+            <TouchableOpacity
+              style={[styles.swipeAction, { backgroundColor: '#5B4FFF' }]}
+              onPress={() => { Linking.openURL(`mailto:${lead.email}`); closeSwipe(); }}
+            >
+              <Ionicons name="mail" size={22} color="#fff" />
+              <Text style={styles.swipeActionText}>Email</Text>
+            </TouchableOpacity>
+          )}
+          {lead.phone && (
+            <TouchableOpacity
+              style={[styles.swipeAction, { backgroundColor: '#3B82F6' }]}
+              onPress={() => { Linking.openURL(`tel:${lead.phone}`); closeSwipe(); }}
+            >
+              <Ionicons name="call" size={22} color="#fff" />
+              <Text style={styles.swipeActionText}>Call</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        <View style={styles.leadDetails}>
-          {item.phone && (
-            <View style={styles.detailRow}>
-              <Ionicons name="call" size={14} color={colors.textMuted} />
-              <Text style={[styles.detailText, { color: colors.textMuted }]}>{item.phone}</Text>
-            </View>
-          )}
-          {item.email && (
-            <View style={styles.detailRow}>
-              <Ionicons name="mail" size={14} color={colors.textMuted} />
-              <Text style={[styles.detailText, { color: colors.textMuted }]}>{item.email}</Text>
-            </View>
-          )}
-        </View>
-
-        {tags.length > 0 && (
-          <View style={styles.tagsRow}>
-            {tags.slice(0, 3).map((tag: string) => (
-              <View key={tag} style={[styles.miniTag, { backgroundColor: colors.primary + '20' }]}>
-                <Text style={[styles.miniTagText, { color: colors.primary }]}>{tag}</Text>
+        {/* Card */}
+        <Animated.View
+          style={[
+            styles.leadCard,
+            { backgroundColor: colors.surface, transform: [{ translateX }] },
+          ]}
+          {...panResponder.panHandlers}
+        >
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => navigation.navigate('LeadDetail', { lead })}
+          >
+            <View style={styles.leadHeader}>
+              <View style={styles.leadInfo}>
+                <Text style={[styles.leadName, { color: colors.text }]}>{displayName}</Text>
+                {lead.company && (
+                  <Text style={[styles.companyName, { color: colors.textMuted }]}>{lead.company}</Text>
+                )}
               </View>
-            ))}
-            {tags.length > 3 && (
-              <Text style={[styles.moreTags, { color: colors.textMuted }]}>+{tags.length - 3}</Text>
-            )}
-          </View>
-        )}
+              <View style={[styles.stageBadge, { backgroundColor: getStageColor(stage) + '20' }]}>
+                <Text style={[styles.stageText, { color: getStageColor(stage) }]}>{stage}</Text>
+              </View>
+            </View>
 
-        <View style={styles.leadFooter}>
-          {item.score != null && (
-            <Text style={[styles.scoreText, { color: colors.primary }]}>Score: {item.score}</Text>
-          )}
-          <Text style={[styles.dateText, { color: colors.textMuted }]}>
-            {item.created_at ? new Date(item.created_at).toLocaleDateString() : ''}
-          </Text>
-        </View>
-      </TouchableOpacity>
+            <View style={styles.leadDetails}>
+              {lead.phone && (
+                <View style={styles.detailRow}>
+                  <Ionicons name="call" size={14} color={colors.textMuted} />
+                  <Text style={[styles.detailText, { color: colors.textMuted }]}>{lead.phone}</Text>
+                </View>
+              )}
+              {lead.email && (
+                <View style={styles.detailRow}>
+                  <Ionicons name="mail" size={14} color={colors.textMuted} />
+                  <Text style={[styles.detailText, { color: colors.textMuted }]}>{lead.email}</Text>
+                </View>
+              )}
+            </View>
+
+            {tags.length > 0 && (
+              <View style={styles.tagsRow}>
+                {tags.slice(0, 3).map((tag: string) => (
+                  <View key={tag} style={[styles.miniTag, { backgroundColor: colors.primary + '20' }]}>
+                    <Text style={[styles.miniTagText, { color: colors.primary }]}>{tag}</Text>
+                  </View>
+                ))}
+                {tags.length > 3 && (
+                  <Text style={[styles.moreTags, { color: colors.textMuted }]}>+{tags.length - 3}</Text>
+                )}
+              </View>
+            )}
+
+            <View style={styles.leadFooter}>
+              {lead.score != null && (
+                <Text style={[styles.scoreText, { color: colors.primary }]}>Score: {lead.score}</Text>
+              )}
+              <Text style={[styles.dateText, { color: colors.textMuted }]}>
+                {lead.created_at ? new Date(lead.created_at).toLocaleDateString() : ''}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </Animated.View>
+      </View>
     );
   }
 
@@ -203,7 +289,7 @@ export default function LeadsScreen({ navigation }: any) {
 
       <FlatList
         data={filteredLeads}
-        renderItem={renderLead}
+        renderItem={({item}) => <SwipeableLeadCard lead={item} />}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -225,6 +311,18 @@ export default function LeadsScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  swipeContainer: { marginBottom: 10, position: 'relative' },
+  swipeActions: {
+    position: 'absolute', right: 0, top: 0, bottom: 0,
+    flexDirection: 'row', alignItems: 'center',
+    paddingRight: 4,
+  },
+  swipeAction: {
+    width: 68, height: '100%',
+    justifyContent: 'center', alignItems: 'center',
+    borderRadius: 8, marginLeft: 4,
+  },
+  swipeActionText: { color: '#fff', fontSize: 11, fontWeight: '600', marginTop: 2 },
   searchContainer: {
     flexDirection: 'row', alignItems: 'center',
     marginHorizontal: 16, marginTop: 12,

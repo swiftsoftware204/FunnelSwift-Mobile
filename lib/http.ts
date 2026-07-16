@@ -292,3 +292,17 @@ export function deleteWebToLeadConfig(id: string) {
 export function getWebToLeadEmbed(id: string) {
   return request<any>('/web-to-lead/configs/' + id + '/embed');
 }
+
+// ── Kinetic Cards ──
+export function getKineticCards() {
+  return request<any[]>('/kinetic/cards');
+}
+
+export function getKineticCard(slug: string) {
+  return request<any>('/kinetic/cards/' + slug);
+}
+
+// ── QR Codes ──
+export function getKineticQrCodes() {
+  return request<{ data: any[]; limit: number }>('/kinetic/qr');
+}
