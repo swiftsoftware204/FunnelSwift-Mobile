@@ -10,7 +10,10 @@ import {
   Linking,
   Image,
   Share,
+  Modal,
+  Dimensions,
   Alert,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../lib/ThemeContext';
@@ -32,6 +35,7 @@ export default function KineticCardsScreen({ route, navigation }: any) {
   const [refreshing, setRefreshing] = useState(false);
   const initialTab = route?.params?.tab === 'qrs' ? 'qrs' : 'cards';
   const [activeTab, setActiveTab] = useState<'cards' | 'qrs'>(initialTab);
+  const [fullscreenQr, setFullscreenQr] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -192,31 +196,54 @@ export default function KineticCardsScreen({ route, navigation }: any) {
                   <View style={styles.cardInfo}>
                     <Text style={[styles.cardName, { color: colors.text }]}>{qr.name}</Text>
                     <Text style={[styles.cardType, { color: colors.textMuted }]}>
-                      {qr.card_title || 'Kinetic Card'} • {qr.download_count || 0} downloads
+                      {qr.card_title || 'Kinetic Card'} • {qr.download_count || 0} scans
                     </Text>
                   </View>
                 </View>
-                {qr.qr_svg_url && (
+                {qr.id && (
                   <View style={styles.qrPreviewRow}>
-                    <Image
-                      source={{ uri: qr.qr_svg_url }}
-                      style={styles.qrPreview}
-                      resizeMode="contain"
-                    />
+                    <TouchableOpacity
+                      onPress={() => setFullscreenQr(`https://funnelswift.net/api/v1/kinetic/qr/${qr.id}/png`)}
+                      activeOpacity={0.7}
+                    >
+                      <Image
+                        source={{ uri: `https://funnelswift.net/api/v1/kinetic/qr/${qr.id}/svg` }}
+                        style={styles.qrPreview}
+                        resizeMode="contain"
+                      />
+                    </TouchableOpacity>
                     <View style={styles.qrActions}>
                       <TouchableOpacity
                         style={[styles.qrActionBtn, { backgroundColor: colors.primary }]}
+                        onPress={() =>
+                          setFullscreenQr(`https://funnelswift.net/api/v1/kinetic/qr/${qr.id}/png`)
+                        }
+                      >
+                        <Ionicons name="scan" size={16} color="#fff" />
+                        <Text style={styles.qrActionText}>Show QR</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.qrActionBtn, { backgroundColor: colors.success }]}
                         onPress={() => {
-                          Linking.openURL(`https://funnelswift.net/k/${qr.slug || 'qr'}`);
+                          const pngUrl = `https://funnelswift.net/api/v1/kinetic/qr/${qr.id}/png`;
+                          if (Platform.OS === 'ios') {
+                            // iOS can save to camera roll
+                            Linking.openURL(pngUrl);
+                            Alert.alert('QR Code', 'Image opened in browser. Save to your photos from there.');
+                          } else {
+                            // Android — trigger download via browser
+                            Linking.openURL(pngUrl);
+                            Alert.alert('QR Code', 'Image downloading. Save it as your screensaver from your gallery.');
+                          }
                         }}
                       >
-                        <Ionicons name="open-outline" size={16} color="#fff" />
-                        <Text style={styles.qrActionText}>Open</Text>
+                        <Ionicons name="download" size={16} color="#fff" />
+                        <Text style={styles.qrActionText}>Save</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.qrActionBtn, { backgroundColor: colors.surfaceLight }]}
                         onPress={() => {
-                          const url = `https://funnelswift.net/k/${qr.slug || 'qr'}`;
+                          const url = `https://funnelswift.net/k/${qr.card_slug || 'qr'}`;
                           Share.share({ message: `Scan my QR: ${url}`, url });
                         }}
                       >
@@ -231,9 +258,34 @@ export default function KineticCardsScreen({ route, navigation }: any) {
           )}
         </>
       )}
+
+      {/* Fullscreen QR Modal */}
+      <Modal
+        visible={!!fullscreenQr}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFullscreenQr(null)}
+      >
+        <TouchableOpacity
+          style={styles.fullscreenOverlay}
+          activeOpacity={1}
+          onPress={() => setFullscreenQr(null)}
+        >
+          {fullscreenQr && (
+            <Image
+              source={{ uri: fullscreenQr }}
+              style={styles.fullscreenQr}
+              resizeMode="contain"
+            />
+          )}
+          <Text style={styles.fullscreenHint}>Tap anywhere to close</Text>
+        </TouchableOpacity>
+      </Modal>
     </ScrollView>
   );
 }
+
+const { width } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
@@ -267,6 +319,16 @@ const styles = StyleSheet.create({
   qrActions: { flex: 1, gap: 8 },
   qrActionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, borderRadius: 8, gap: 4 },
   qrActionText: { color: '#fff', fontSize: 13, fontWeight: '500' },
+  fullscreenOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.95)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  fullscreenQr: {
+    width: width * 0.8, height: width * 0.8,
+    backgroundColor: '#fff',
+    borderRadius: 16, padding: 16,
+  },
+  fullscreenHint: { color: '#64748b', fontSize: 14, marginTop: 32 },
   emptyState: { alignItems: 'center', paddingTop: 60 },
   emptyTitle: { fontSize: 18, fontWeight: '600', marginTop: 16 },
   emptySubtitle: { fontSize: 13, marginTop: 6, textAlign: 'center' },
