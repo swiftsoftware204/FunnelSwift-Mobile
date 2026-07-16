@@ -16,6 +16,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../lib/ThemeContext';
 import * as http from '../../lib/http';
 
+function getTypeColor(type: string): string {
+  switch (type) {
+    case 'Business Card': return '#22C55E';
+    case 'Mini-Page': return '#5B4FFF';
+    default: return '#64748b';
+  }
+}
+
 export default function KineticCardsScreen({ route, navigation }: any) {
   const { colors } = useTheme();
   const [cards, setCards] = useState<any[]>([]);
@@ -130,7 +138,11 @@ export default function KineticCardsScreen({ route, navigation }: any) {
                   <View style={styles.cardInfo}>
                     <Text style={[styles.cardName, { color: colors.text }]}>{card.title || card.name}</Text>
                     <Text style={[styles.cardSlug, { color: colors.primary }]}>/k/{card.slug}</Text>
-                    <Text style={[styles.cardType, { color: colors.textMuted }]}>{getCardType(card)}</Text>
+                    <View style={styles.typeRow}>
+                      <View style={[styles.typeBadge, { backgroundColor: getTypeColor(getCardType(card)) }]}>
+                        <Text style={styles.typeBadgeText}>{getCardType(card)}</Text>
+                      </View>
+                    </View>
                   </View>
                   <View style={styles.cardActions}>
                     <TouchableOpacity
@@ -225,6 +237,9 @@ export default function KineticCardsScreen({ route, navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
+  typeRow: { flexDirection: 'row', marginTop: 4 },
+  typeBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+  typeBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   tabRow: {
     flexDirection: 'row', gap: 8, marginBottom: 20,
     backgroundColor: '#1e2130', borderRadius: 10, padding: 4,
