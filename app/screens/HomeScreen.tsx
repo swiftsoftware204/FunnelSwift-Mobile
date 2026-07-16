@@ -45,6 +45,20 @@ export default function HomeScreen({ navigation }: any) {
       onPress: () => navigation.navigate('Leads'),
       color: colors.success,
     },
+    {
+      icon: 'qr-code' as const,
+      title: 'QR Codes',
+      description: 'Your QR codes for scanning',
+      onPress: () => navigation.navigate('KineticCards', { tab: 'qrs' }),
+      color: '#F59E0B',
+    },
+    {
+      icon: 'flash' as const,
+      title: 'Kinetic Cards & Bio Links',
+      description: 'Bio-links, mini-pages, business cards',
+      onPress: () => navigation.navigate('KineticCards'),
+      color: colors.primary,
+    },
   ];
 
   return (

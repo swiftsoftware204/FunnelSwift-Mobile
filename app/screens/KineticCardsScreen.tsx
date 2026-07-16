@@ -16,13 +16,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../lib/ThemeContext';
 import * as http from '../../lib/http';
 
-export default function KineticCardsScreen({ navigation }: any) {
+export default function KineticCardsScreen({ route, navigation }: any) {
   const { colors } = useTheme();
   const [cards, setCards] = useState<any[]>([]);
   const [qrs, setQrs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'cards' | 'qrs'>('cards');
+  const initialTab = route?.params?.tab === 'qrs' ? 'qrs' : 'cards';
+  const [activeTab, setActiveTab] = useState<'cards' | 'qrs'>(initialTab);
 
   useEffect(() => {
     fetchData();
