@@ -20,6 +20,7 @@ interface BatchItem {
   status: 'pending' | 'processing' | 'done' | 'error';
   result?: Record<string, string>;
   error?: string;
+  duplicate?: boolean;
 }
 
 interface Props {

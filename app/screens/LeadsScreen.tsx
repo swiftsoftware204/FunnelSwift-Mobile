@@ -93,6 +93,7 @@ export default function LeadsScreen({ navigation }: any) {
   // ── Swipeable Lead Card ──
   function SwipeableLeadCard({ lead }: { lead: any }) {
     const translateX = useRef(new Animated.Value(0)).current;
+    const cardHeight = useRef(0);
     const SWIPE_THRESHOLD = 80;
     const ACTION_WIDTH = 72;
 
@@ -135,37 +136,51 @@ export default function LeadsScreen({ navigation }: any) {
     const displayName = lead.name || lead.email || 'Unknown';
     const stage = lead.stage || lead.status || 'New';
 
+    const actionButtons: React.ReactNode[] = [];
+    if (lead.phone) {
+      actionButtons.push(
+        <TouchableOpacity
+          key="text"
+          style={[styles.swipeAction, { backgroundColor: '#22C55E' }]}
+          onPress={() => { Linking.openURL(`sms:${lead.phone}`); closeSwipe(); }}
+        >
+          <Ionicons name="chatbubble" size={22} color="#fff" />
+          <Text style={styles.swipeActionText}>Text</Text>
+        </TouchableOpacity>
+      );
+      actionButtons.push(
+        <TouchableOpacity
+          key="call"
+          style={[styles.swipeAction, { backgroundColor: '#3B82F6' }]}
+          onPress={() => { Linking.openURL(`tel:${lead.phone}`); closeSwipe(); }}
+        >
+          <Ionicons name="call" size={22} color="#fff" />
+          <Text style={styles.swipeActionText}>Call</Text>
+        </TouchableOpacity>
+      );
+    }
+    if (lead.email) {
+      actionButtons.push(
+        <TouchableOpacity
+          key="email"
+          style={[styles.swipeAction, { backgroundColor: '#5B4FFF' }]}
+          onPress={() => { Linking.openURL(`mailto:${lead.email}`); closeSwipe(); }}
+        >
+          <Ionicons name="mail" size={22} color="#fff" />
+          <Text style={styles.swipeActionText}>Email</Text>
+        </TouchableOpacity>
+      );
+    }
+
+    const buttonCount = actionButtons.length;
+
     return (
       <View style={styles.swipeContainer}>
-        {/* Action Buttons Behind Card */}
-        <View style={styles.swipeActions}>
-          {lead.phone && (
-            <TouchableOpacity
-              style={[styles.swipeAction, { backgroundColor: '#22C55E' }]}
-              onPress={() => { Linking.openURL(`sms:${lead.phone}`); closeSwipe(); }}
-            >
-              <Ionicons name="chatbubble" size={22} color="#fff" />
-              <Text style={styles.swipeActionText}>Text</Text>
-            </TouchableOpacity>
-          )}
-          {lead.email && (
-            <TouchableOpacity
-              style={[styles.swipeAction, { backgroundColor: '#5B4FFF' }]}
-              onPress={() => { Linking.openURL(`mailto:${lead.email}`); closeSwipe(); }}
-            >
-              <Ionicons name="mail" size={22} color="#fff" />
-              <Text style={styles.swipeActionText}>Email</Text>
-            </TouchableOpacity>
-          )}
-          {lead.phone && (
-            <TouchableOpacity
-              style={[styles.swipeAction, { backgroundColor: '#3B82F6' }]}
-              onPress={() => { Linking.openURL(`tel:${lead.phone}`); closeSwipe(); }}
-            >
-              <Ionicons name="call" size={22} color="#fff" />
-              <Text style={styles.swipeActionText}>Call</Text>
-            </TouchableOpacity>
-          )}
+        {/* Action Buttons Behind Card — clipped so they don't peek until swiped */}
+        <View style={[styles.swipeTrack, { height: cardHeight.current > 0 ? cardHeight.current : 120 }]}>
+          <View style={[styles.swipeActions, { width: buttonCount * 72 + 8 }]}>
+            {actionButtons}
+          </View>
         </View>
 
         {/* Card */}
@@ -174,6 +189,7 @@ export default function LeadsScreen({ navigation }: any) {
             styles.leadCard,
             { backgroundColor: colors.surface, transform: [{ translateX }] },
           ]}
+          onLayout={(e) => { cardHeight.current = e.nativeEvent.layout.height; }}
           {...panResponder.panHandlers}
         >
           <TouchableOpacity
@@ -312,13 +328,17 @@ export default function LeadsScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   swipeContainer: { marginBottom: 10, position: 'relative' },
+  swipeTrack: {
+    position: 'absolute', right: 0, left: 0, top: 0,
+    overflow: 'hidden',
+  },
   swipeActions: {
     position: 'absolute', right: 0, top: 0, bottom: 0,
     flexDirection: 'row', alignItems: 'center',
     paddingRight: 4,
   },
   swipeAction: {
-    width: 68, height: '100%',
+    width: 68, height: 120,
     justifyContent: 'center', alignItems: 'center',
     borderRadius: 8, marginLeft: 4,
   },

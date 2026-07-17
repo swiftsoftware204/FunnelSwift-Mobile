@@ -1,10 +1,13 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, AppState } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../lib/AuthContext';
 import { useTheme } from '../../lib/ThemeContext';
 import * as http from '../../lib/http';
 import TagsManager from '../components/TagsManager';
+import QuickCaptureModal from '../components/QuickCaptureModal';
+import CampaignsPicker from '../components/CampaignsPicker';
 
 export default function HomeScreen({ navigation }: any) {
   const { user, isSuperAdmin } = useAuth();
@@ -12,32 +15,83 @@ export default function HomeScreen({ navigation }: any) {
   const [stats, setStats] = useState({ total: 0, today: 0, week: 0 });
   const [showSettings, setShowSettings] = useState(false);
   const [showTagsManager, setShowTagsManager] = useState(false);
+  const [showQuickCapture, setShowQuickCapture] = useState(false);
+  const [showCampaigns, setShowCampaigns] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [syncing, setSyncing] = useState(false);
 
+  // Check for offline leads and try to sync
   useEffect(() => {
-    (async () => {
-      try {
-        const data = await http.getDashboardStats();
-        if (data) {
-          setStats({
-            total: data.total_leads || data.total || 0,
-            today: data.today_leads || data.today || 0,
-            week: data.week_leads || data.week || 0,
-          });
-        }
-      } catch {
-        // silent
+    checkPendingLeads();
+    
+    // Auto-sync when app comes to foreground
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        checkPendingLeads();
       }
-    })();
+    });
+    return () => sub.remove();
   }, []);
 
+  // Refresh when returning to this screen
+  useFocusEffect(
+    useCallback(() => {
+      refreshStats();
+      checkPendingLeads();
+    }, [])
+  );
+
+  async function refreshStats() {
+    try {
+      const data = await http.getDashboardStats();
+      if (data) {
+        setStats({
+          total: data.total_leads || data.total || 0,
+          today: data.today_leads || data.today || 0,
+          week: data.week_leads || data.week || 0,
+        });
+      }
+    } catch {
+      // silent
+    }
+  }
+
+  async function checkPendingLeads() {
+    try {
+      const pending = await http.getPendingLeads();
+      setPendingCount(pending.length);
+      
+      // Auto-sync if there are pending leads
+      if (pending.length > 0 && !syncing) {
+        setSyncing(true);
+        const result = await http.syncOfflineLeads();
+        if (result.synced > 0) {
+          const remaining = await http.getPendingLeads();
+          setPendingCount(remaining.length);
+          refreshStats();
+        }
+        setSyncing(false);
+      }
+    } catch {
+      // silent
+    }
+  }
+
+  async function handleQuickCaptured() {
+    refreshStats();
+    checkPendingLeads();
+  }
+
+  async function handleCreateTag(tagName: string) {
+    try {
+      await http.createTag({ name: tagName });
+      // Tag synced to CoreSwift automatically
+    } catch {
+      // silent — tag will be available on next sync
+    }
+  }
+
   const quickActions = [
-    {
-      icon: 'add-circle' as const,
-      title: 'Capture Lead',
-      description: 'Add new business lead',
-      onPress: () => navigation.navigate('Capture'),
-      color: colors.primary,
-    },
     {
       icon: 'people' as const,
       title: 'View Leads',
@@ -59,6 +113,13 @@ export default function HomeScreen({ navigation }: any) {
       onPress: () => navigation.navigate('KineticCards'),
       color: colors.primary,
     },
+    {
+      icon: 'megaphone' as const,
+      title: 'Campaigns',
+      description: 'Share a campaign link via text or email',
+      onPress: () => setShowCampaigns(true),
+      color: '#EC4899',
+    },
   ];
 
   return (
@@ -74,6 +135,24 @@ export default function HomeScreen({ navigation }: any) {
           {isSuperAdmin ? 'Admin' : 'Sales Rep'}
             </Text>
           </View>
+          
+          {/* Pending sync badge */}
+          {pendingCount > 0 && (
+            <TouchableOpacity
+              style={styles.pendingBadge}
+              onPress={checkPendingLeads}
+            >
+              <Ionicons name="cloud-upload" size={16} color="#FBBF24" />
+              <Text style={styles.pendingBadgeText}>{pendingCount}</Text>
+            </TouchableOpacity>
+          )}
+          
+          {syncing && (
+            <View style={styles.pendingBadge}>
+              <Text style={styles.pendingBadgeText}>↻</Text>
+            </View>
+          )}
+          
           <TouchableOpacity onPress={() => setShowSettings(true)}>
             <Ionicons name="settings-outline" size={24} color={colors.textMuted} />
           </TouchableOpacity>
@@ -117,6 +196,28 @@ export default function HomeScreen({ navigation }: any) {
       ))}
     </ScrollView>
 
+    {/* Floating Action Button — Quick Capture */}
+    <TouchableOpacity
+      style={[styles.fab, { backgroundColor: colors.primary }]}
+      onPress={() => setShowQuickCapture(true)}
+      activeOpacity={0.8}
+    >
+      <Ionicons name="flash" size={28} color="#fff" />
+    </TouchableOpacity>
+
+      {/* Quick Capture Modal */}
+      <QuickCaptureModal
+        visible={showQuickCapture}
+        onClose={() => setShowQuickCapture(false)}
+        onCaptured={handleQuickCaptured}
+      />
+
+      {/* Campaigns Picker Modal */}
+      <CampaignsPicker
+        visible={showCampaigns}
+        onClose={() => setShowCampaigns(false)}
+      />
+
       {/* Settings Modal */}
       <Modal visible={showSettings} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowSettings(false)}>
         <View style={[styles.settingsScreen, { backgroundColor: colors.background }]}>
@@ -152,6 +253,37 @@ export default function HomeScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 100,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    zIndex: 100,
+  },
+  pendingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#78350F',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 12,
+    gap: 4,
+  },
+  pendingBadgeText: {
+    color: '#FBBF24',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   settingsScreen: { flex: 1 },
   settingsHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',

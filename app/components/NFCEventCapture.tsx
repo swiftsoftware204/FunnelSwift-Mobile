@@ -8,7 +8,7 @@ import {
   Animated,
   Alert,
 } from 'react-native';
-import NfcManager, { NfcTech } from 'react-native-nfc-manager';
+import NfcManager, { NfcTech, NfcEvents } from 'react-native-nfc-manager';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../lib/ThemeContext';
 
@@ -106,7 +106,7 @@ export default function NFCEventCapture({
   useEffect(() => {
     checkNfcSupport();
     return () => {
-      NfcManager.setEventListener('NfcManagerDiscoverTag', null);
+      NfcManager.setEventListener(NfcEvents.DiscoverTag, null);
       NfcManager.unregisterTagEvent().catch(() => {});
     };
   }, []);
@@ -155,11 +155,12 @@ export default function NFCEventCapture({
       await NfcManager.registerTagEvent();
 
       // Wait for NDEF discovery
-      const tag = await NfcManager.requestTechnology(NfcTech.Ndef);
+      await NfcManager.requestTechnology(NfcTech.Ndef);
+      const tagEvent = await NfcManager.getTag();
 
-      if (tag && tag.ndefMessage && tag.ndefMessage.length > 0) {
+      if (tagEvent && tagEvent.ndefMessage && tagEvent.ndefMessage.length > 0) {
         // Decode NDEF records
-        const records = tag.ndefMessage;
+        const records = tagEvent.ndefMessage;
         let textContent = '';
 
         for (const record of records) {
@@ -508,7 +509,7 @@ const styles = StyleSheet.create({
   lastContact: { margin: 20, padding: 16, borderRadius: 12 },
   lastContactLabel: { fontSize: 12, textTransform: 'uppercase' },
   lastContactName: { fontSize: 18, fontWeight: '600', marginTop: 4 },
-  successOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
+  successOverlay: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
   successBox: { padding: 40, borderRadius: 20, alignItems: 'center' },
   successText: { color: '#fff', fontSize: 24, fontWeight: '600', marginTop: 16 },
   stopButton: { margin: 20, padding: 16, borderRadius: 12, borderWidth: 2, alignItems: 'center' },

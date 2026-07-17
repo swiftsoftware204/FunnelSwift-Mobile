@@ -445,6 +445,25 @@ export default function CaptureScreen() {
         onToggleTag={handleToggleTag}
         onClose={() => setShowTagSelector(false)}
         availableTags={availableTags}
+        onCreateTag={async (tagName) => {
+          try {
+            await http.createTag({ name: tagName });
+            // Refresh tags
+            const tags = await http.getTags();
+            if (tags && tags.length > 0) {
+              setAvailableTags(tags.map((t: any) => ({
+                id: t.id,
+                name: t.name,
+                displayName: t.name,
+                color: t.color || '#5B4FFF',
+                group: 'Tags',
+                groupId: t.group_id || 'default',
+                is_system: t.is_system,
+              })));
+            }
+            handleToggleTag(tagName);
+          } catch {}
+        }}
       />
 
       <Modal visible={showQR} animationType="slide" onRequestClose={() => setShowQR(false)}>
@@ -551,6 +570,7 @@ const styles = StyleSheet.create({
   miniTag: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
   miniTagText: { fontSize: 11, fontWeight: '500' },
   tagPlaceholder: { flex: 1, fontSize: 14 },
+  fieldLabel: { fontSize: 13, fontWeight: '600', marginBottom: 4 },
   addFieldSection: { marginTop: 4 },
   addFieldRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   addFieldChip: {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -38,6 +38,7 @@ interface Props {
   availableTags?: Tag[]; // Dynamic tags from API — primary source
   systemTags?: Tag[]; // Fallback if no API tags
   customTags?: Tag[];
+  onCreateTag?: (tagName: string) => void; // Callback for creating a new tag
 }
 
 const FALLBACK_TAGS: Tag[] = [
@@ -63,10 +64,14 @@ export default function TagSelector({
   availableTags,
   systemTags,
   customTags = [],
+  onCreateTag,
 }: Props) {
   const { colors } = useTheme();
   const [search, setSearch] = useState('');
   const [groupedTags, setGroupedTags] = useState<TagGroup[]>([]);
+  const [newTagName, setNewTagName] = useState('');
+  const [showNewTagInput, setShowNewTagInput] = useState(false);
+  const newTagInputRef = useRef<TextInput>(null);
 
   useEffect(() => {
     // Determine which tags to use: API dynamic tags first, then fallback
@@ -128,6 +133,69 @@ export default function TagSelector({
             value={search}
             onChangeText={setSearch}
           />
+
+          {/* New Tag Input */}
+          {onCreateTag && (
+            <View style={[styles.newTagRow, { borderColor: colors.border }]}>
+              {showNewTagInput ? (
+                <>
+                  <TextInput
+                    ref={newTagInputRef}
+                    style={[styles.newTagInput, {
+                      backgroundColor: colors.surfaceLight,
+                      borderColor: colors.primary,
+                      color: colors.text,
+                    }]}
+                    placeholder="New tag name..."
+                    placeholderTextColor={colors.textMuted}
+                    value={newTagName}
+                    onChangeText={setNewTagName}
+                    autoFocus
+                    returnKeyType="done"
+                    onSubmitEditing={() => {
+                      if (newTagName.trim()) {
+                        onCreateTag(newTagName.trim());
+                        setNewTagName('');
+                        setShowNewTagInput(false);
+                      }
+                    }}
+                  />
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (newTagName.trim()) {
+                        onCreateTag(newTagName.trim());
+                        setNewTagName('');
+                        setShowNewTagInput(false);
+                      }
+                    }}
+                    style={[styles.newTagConfirmBtn, { backgroundColor: colors.primary }]}
+                  >
+                    <Ionicons name="checkmark" size={20} color="#fff" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setShowNewTagInput(false);
+                      setNewTagName('');
+                    }}
+                    style={styles.newTagCancelBtn}
+                  >
+                    <Ionicons name="close" size={20} color={colors.textMuted} />
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <TouchableOpacity
+                  style={styles.newTagButton}
+                  onPress={() => {
+                    setShowNewTagInput(true);
+                    setTimeout(() => newTagInputRef.current?.focus(), 100);
+                  }}
+                >
+                  <Ionicons name="add-circle" size={20} color={colors.primary} />
+                  <Text style={[styles.newTagButtonText, { color: colors.primary }]}>New Tag</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
 
           <ScrollView style={styles.tagList}>
             {groupedTags.length === 0 && (
@@ -314,5 +382,45 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 4,
     textAlign: 'center',
+  },
+  newTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    gap: 8,
+  },
+  newTagButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+  },
+  newTagButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  newTagInput: {
+    flex: 1,
+    height: 40,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 14,
+  },
+  newTagConfirmBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  newTagCancelBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

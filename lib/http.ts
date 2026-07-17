@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import * as ImageManipulator from 'expo-image-manipulator';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Import legacy for fallback (SDK 57 moved to legacy)
 import { readAsStringAsync as legacyReadAsString } from 'expo-file-system/legacy';
@@ -305,4 +306,85 @@ export function getKineticCard(slug: string) {
 // ── QR Codes ──
 export function getKineticQrCodes() {
   return request<{ data: any[]; limit: number }>('/kinetic/qr');
+}
+
+// ── IncentiveSwift Config (API key for mobile app to call IS directly) ──
+export function getIncentiveSwiftConfig() {
+  return request<{
+    connected: boolean;
+    api_key: string | null;
+    base_url: string | null;
+    campaigns_url: string | null;
+  }>('/incentiveswift/config');
+}
+
+// ── Campaigns (fetched directly from IncentiveSwift API) ──
+export async function getCampaigns(): Promise<{ campaigns: any[] }> {
+  const config = await getIncentiveSwiftConfig();
+  if (!config.connected || !config.api_key || !config.campaigns_url) {
+    return { campaigns: [] };
+  }
+  const response = await fetch(config.campaigns_url, {
+    headers: {
+      'Authorization': `Bearer ${config.api_key}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!response.ok) {
+    return { campaigns: [] };
+  }
+  return response.json();
+}
+
+// ── Offline Queue ──
+export async function getPendingLeads(): Promise<any[]> {
+  try {
+    const raw = await AsyncStorage.getItem('offline_leads_queue');
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+export async function addPendingLead(data: Record<string, any>): Promise<void> {
+  const queue = await getPendingLeads();
+  queue.push({ ...data, _queued_at: new Date().toISOString() });
+  await AsyncStorage.setItem('offline_leads_queue', JSON.stringify(queue));
+}
+
+export async function removePendingLead(index: number): Promise<void> {
+  const queue = await getPendingLeads();
+  queue.splice(index, 1);
+  await AsyncStorage.setItem('offline_leads_queue', JSON.stringify(queue));
+}
+
+export async function clearPendingLeads(): Promise<void> {
+  await AsyncStorage.removeItem('offline_leads_queue');
+}
+
+export async function syncOfflineLeads(onProgress?: (synced: number, total: number) => void): Promise<{ synced: number; failed: number }> {
+  const queue = await getPendingLeads();
+  if (queue.length === 0) return { synced: 0, failed: 0 };
+  
+  let synced = 0;
+  let failed = 0;
+  
+  for (let i = 0; i < queue.length; i++) {
+    try {
+      await createLead(queue[i]);
+      synced++;
+      onProgress?.(synced, queue.length);
+    } catch {
+      failed++;
+    }
+  }
+  
+  // Clear successfully synced leads
+  if (failed === 0) {
+    await clearPendingLeads();
+  } else {
+    // Keep failed ones in queue
+    const remaining = queue.filter((_, i) => i < queue.length - failed);
+    await AsyncStorage.setItem('offline_leads_queue', JSON.stringify(remaining));
+  }
+  
+  return { synced, failed };
 }

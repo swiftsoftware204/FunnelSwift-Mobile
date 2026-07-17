@@ -344,7 +344,7 @@ export default function LeadDetailScreen({ route, navigation }: any) {
                   style={[styles.addFieldChip, { backgroundColor: colors.surfaceLight, borderColor: colors.border }]}
                   onPress={() => addField(field.key)}
                 >
-                  <Ionicons name={field.icon} size={14} color={colors.primary} />
+                  <Ionicons name={field.icon as any} size={14} color={colors.primary} />
                   <Text style={[styles.addFieldChipText, { color: colors.text }]}>{field.label}</Text>
                 </TouchableOpacity>
               ))}
@@ -477,4 +477,10 @@ const styles = StyleSheet.create({
   actionBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   editTrigger: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginHorizontal: 16, marginTop: 10, padding: 12, borderRadius: 8, gap: 6 },
   deleteTrigger: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginHorizontal: 16, marginTop: 8, marginBottom: 32, padding: 12, borderRadius: 8, gap: 6, borderWidth: 1, borderColor: '#EF4444' },
+  addFieldChip: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: 16, borderWidth: 1, gap: 4,
+  },
+  addFieldChipText: { fontSize: 12, fontWeight: '500' },
 });
