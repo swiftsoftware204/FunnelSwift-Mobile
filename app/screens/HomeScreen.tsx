@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, AppState } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, AppState, Share } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../lib/AuthContext';
@@ -91,14 +91,16 @@ export default function HomeScreen({ navigation }: any) {
     }
   }
 
+  async function handleShareApp() {
+    try {
+      await Share.share({
+        message: 'Try FunnelSwift — capture leads, track campaigns, and grow your business on the go! https://funnelswift.net/download-app',
+        url: 'https://funnelswift.net/download-app',
+      });
+    } catch { /* silent */ }
+  }
+
   const quickActions = [
-    {
-      icon: 'people' as const,
-      title: 'View Leads',
-      description: 'See all captured leads',
-      onPress: () => navigation.navigate('Leads'),
-      color: colors.success,
-    },
     {
       icon: 'qr-code' as const,
       title: 'QR Codes',
@@ -129,7 +131,7 @@ export default function HomeScreen({ navigation }: any) {
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
             <Text style={[styles.greeting, { color: colors.text }]}>
-          Hello, {user?.email?.split('@')[0] || 'User'}!
+          Hello, {user?.name || user?.email?.split('@')[0] || 'User'}!
         </Text>
         <Text style={[styles.subtitle, { color: colors.textMuted }]}>
           {isSuperAdmin ? 'Admin' : 'Sales Rep'}
@@ -153,6 +155,9 @@ export default function HomeScreen({ navigation }: any) {
             </View>
           )}
           
+          <TouchableOpacity onPress={handleShareApp} style={{ marginRight: 12 }}>
+            <Ionicons name="share-outline" size={22} color={colors.primary} />
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => setShowSettings(true)}>
             <Ionicons name="settings-outline" size={24} color={colors.textMuted} />
           </TouchableOpacity>
